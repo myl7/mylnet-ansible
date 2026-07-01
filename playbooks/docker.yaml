@@ -34,6 +34,8 @@
       ansible.builtin.get_url:
         url: "{{ docker_apt_repo_url }}/gpg"
         dest: /etc/apt/keyrings/docker.asc
+        owner: root
+        group: root
         mode: "0644"
 
     - name: Add Docker apt source
@@ -59,7 +61,7 @@
       register: docker_apt_source
       changed_when: false
 
-    - name: Install Docker Engine
+    - name: Install Docker
       ansible.builtin.apt:
         name: docker-ce
         state: present
