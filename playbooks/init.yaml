@@ -97,6 +97,14 @@
         state: started
         enabled: true
 
+    - name: Create nftables drop-in directory
+      ansible.builtin.file:
+        path: /etc/nftables.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
     - name: Setup nftables
       ansible.builtin.copy:
         src: ../files/nftables.conf
