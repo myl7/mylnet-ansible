@@ -63,7 +63,9 @@
 
     - name: Install Docker
       ansible.builtin.apt:
-        name: docker-ce
+        name:
+          - docker-ce
+          - docker-compose-plugin
         state: present
         update_cache: true
       when: docker_apt_source.stat.exists
