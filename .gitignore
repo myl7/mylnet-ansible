@@ -1,0 +1,13 @@
+# IDE
+.vscode
+.idea
+
+# Agents
+.agents
+.codex
+.claude
+.firecrawl
+
+# Credentials
+.ssh
+secrets.yaml

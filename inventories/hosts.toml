@@ -1,0 +1,20 @@
+[hosts.vars]
+ansible_user = "{{ username }}"
+ansible_port = 50000
+
+[hosts.hosts]
+sg = { ansible_host = "38.54.16.65" }
+
+[raw]
+children = ["lightnode"]
+
+[raw.vars]
+ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ inventory_dir }}/../.ssh/known_host_raw"
+
+[lightnode.vars]
+ansible_user = "root"
+ansible_port = 22
+ansible_ssh_private_key_file = "./.ssh/id_rsa"
+
+[lightnode.hosts]
+"sg.raw" = { ansible_host = "38.54.16.65" }

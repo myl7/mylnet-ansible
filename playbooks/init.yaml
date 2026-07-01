@@ -1,0 +1,154 @@
+---
+# Assume ssh and apt.
+# Assume python3 in apt fits Ansible.
+
+# CAUTION: Already-initialized hosts can still run this play, but with no config reloading.
+# Manually use the side-effect play to reload config if the corresponding tasks result in changes.
+- name: Init newly-created hosts
+  hosts: raw, hosts
+  gather_facts: false
+  become: true
+
+  vars_files:
+    - ../secrets.yaml
+
+  pre_tasks:
+    - name: Check required local config
+      ansible.builtin.assert:
+        that:
+          - password_hash | default('') | trim | length > 0
+        fail_msg: "Set password_hash in secrets.yaml"
+        quiet: true
+      run_once: true
+      delegate_to: localhost
+
+  tasks:
+    - name: Bootstrap Python for Ansible
+      ansible.builtin.raw: |
+        if command -v python3 >/dev/null 2>&1; then
+          echo "python3 present"
+        else
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-apt
+          echo "python3 installed"
+        fi
+      register: bootstrap_python
+      changed_when: "'python3 installed' in bootstrap_python.stdout"
+
+    - name: Upgrade packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: yes
+
+    - name: Install basic packages
+      ansible.builtin.apt:
+        name:
+          - sudo
+          - build-essential
+          - bash
+          - neovim
+          - git
+          - nftables
+          - htop
+          - net-tools
+          - dnsutils
+          - ncdu
+          - curl
+          - wget
+          - rsync
+        state: present
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname_short }}"
+
+    - name: Update hosts for hostname
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '^(127\.0\.1\.1|{{ ansible_host | regex_escape }})\s+'
+        line: "{{ ansible_host }} {{ inventory_hostname_short }}"
+
+    - name: Update ssh config
+      ansible.builtin.blockinfile:
+        path: /etc/ssh/sshd_config
+        insertbefore: BOF
+        marker: "# {mark} ANSIBLE MANAGED MYLNET SSH CONFIG"
+        block: |
+          PermitRootLogin no
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          Port 50000
+          UseDNS no
+        validate: /usr/sbin/sshd -t -f %s
+
+    - name: Comment default ssh port
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*(Port 22.*)$'
+        line: '# \1'
+        backrefs: true
+        validate: /usr/sbin/sshd -t -f %s
+
+    - name: Start and enable nftables
+      ansible.builtin.systemd_service:
+        name: nftables
+        state: started
+        enabled: true
+
+    - name: Setup nftables
+      ansible.builtin.copy:
+        src: ../files/nftables.conf
+        dest: /etc/nftables.conf
+
+    - name: Add user
+      ansible.builtin.user:
+        name: "{{ username }}"
+        state: present
+        shell: /bin/bash
+        create_home: true
+        groups: sudo
+        append: true
+        password: "{{ password_hash }}"
+        update_password: on_create
+
+    - name: Check user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ username }}"
+        fail_key: false
+      changed_when: false
+
+    - name: Allow user to run passwordless sudo
+      ansible.builtin.copy:
+        content: "{{ username }} ALL=(ALL:ALL) NOPASSWD:ALL\n"
+        dest: "/etc/sudoers.d/{{ username }}"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: /usr/sbin/visudo -cf %s
+
+    - name: Setup user ssh
+      ansible.posix.authorized_key:
+        user: "{{ username }}"
+        state: present
+        key: "{{ lookup('file', '../.ssh/id_ed25519.pub') }}"
+      when: ansible_facts.getent_passwd[username] is not none
+
+# CAUTION: Have side effects.
+# Reloading nftables should reuse the legacy ssh connection after using new ssh config.
+# If failed, manually reload nftables.
+- name: Apply nftables and ssh config
+  hosts: raw, hosts
+  tags: side_effect
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Restart ssh
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: restarted
+
+    - name: Reload nftables
+      ansible.builtin.command:
+        cmd: nft -f /etc/nftables.conf
