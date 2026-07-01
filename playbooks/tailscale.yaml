@@ -1,0 +1,115 @@
+---
+# Assume apt and an initialized host.
+# Auth keys are read from secrets.yaml at tailscale_auth_keys[inventory_hostname].
+# Prefer one-off auth keys for enrollment; reusable auth keys are also supported.
+- name: Setup Tailscale
+  hosts: hosts
+  become: true
+
+  vars_files:
+    - ../secrets.yaml
+
+  vars:
+    tailscale_distros:
+      - Debian
+      - Ubuntu
+    tailscale_apt_repo_url: "https://pkgs.tailscale.com/stable/{{ ansible_facts.distribution | lower }}/{{ ansible_facts.distribution_release }}"
+    tailscale_auth_key: "{{ (tailscale_auth_keys | default({})).get(inventory_hostname, '') }}"
+
+  tasks:
+    - name: Check supported Tailscale apt source distribution
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution in tailscale_distros
+          - ansible_facts.distribution_release | default('') | length > 0
+        fail_msg: "Tailscale apt source is configured only for Debian and Ubuntu hosts with a release codename"
+        quiet: true
+
+    - name: Check official Tailscale installer support
+      ansible.builtin.uri:
+        url: "{{ tailscale_apt_repo_url }}/installer-supported"
+        return_content: true
+      register: tailscale_installer_supported
+      changed_when: false
+      check_mode: false
+      failed_when: >
+        tailscale_installer_supported.status != 200 or
+        tailscale_installer_supported.content | trim != 'OK'
+
+    - name: Download Tailscale apt signing key
+      ansible.builtin.get_url:
+        url: "{{ tailscale_apt_repo_url }}.noarmor.gpg"
+        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add Tailscale apt source
+      ansible.builtin.get_url:
+        url: "{{ tailscale_apt_repo_url }}.tailscale-keyring.list"
+        dest: /etc/apt/sources.list.d/tailscale.list
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Check Tailscale apt source exists
+      ansible.builtin.stat:
+        path: /etc/apt/sources.list.d/tailscale.list
+      register: tailscale_apt_source
+      changed_when: false
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: true
+      when: tailscale_apt_source.stat.exists
+
+    - name: Start and enable Tailscale
+      ansible.builtin.systemd_service:
+        name: tailscaled
+        state: started
+        enabled: true
+      when: tailscale_apt_source.stat.exists
+
+    - name: Check Tailscale status
+      ansible.builtin.command:
+        cmd: tailscale status --json
+      register: tailscale_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: tailscale_apt_source.stat.exists
+
+    - name: Set Tailscale login state fact
+      ansible.builtin.set_fact:
+        tailscale_logged_in: "{{ tailscale_status_json.HaveNodeKey | default(false) | bool }}"
+      vars:
+        tailscale_status_json: >-
+          {{ (tailscale_status.stdout | from_json)
+             if tailscale_status.rc == 0 and (tailscale_status.stdout | trim | length > 0)
+             else {} }}
+      when: tailscale_apt_source.stat.exists
+
+    - name: Check Tailscale auth key is provided
+      ansible.builtin.assert:
+        that:
+          - tailscale_auth_key | trim | length > 0
+        fail_msg: 'Set tailscale_auth_keys["{{ inventory_hostname }}"] in secrets.yaml to a Tailscale auth key'
+        quiet: true
+      when:
+        - tailscale_apt_source.stat.exists
+        - not tailscale_logged_in
+
+    - name: Authenticate Tailscale with auth key
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - up
+          - --timeout=600s
+          - "--auth-key={{ tailscale_auth_key }}"
+      register: tailscale_up
+      no_log: true
+      when:
+        - tailscale_apt_source.stat.exists
+        - not tailscale_logged_in
