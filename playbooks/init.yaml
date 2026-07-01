@@ -97,11 +97,11 @@
         state: started
         enabled: true
 
-    # TODO： Validate config
     - name: Setup nftables
       ansible.builtin.copy:
         src: ../files/nftables.conf
         dest: /etc/nftables.conf
+        validate: /usr/sbin/nft --check --file %s
 
     - name: Add user
       ansible.builtin.user:
