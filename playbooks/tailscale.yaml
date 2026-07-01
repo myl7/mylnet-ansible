@@ -45,16 +45,23 @@
         mode: "0644"
 
     - name: Add Tailscale apt source
-      ansible.builtin.get_url:
-        url: "{{ tailscale_apt_repo_url }}.tailscale-keyring.list"
-        dest: /etc/apt/sources.list.d/tailscale.list
-        owner: root
-        group: root
+      ansible.builtin.deb822_repository:
+        name: tailscale
+        types:
+          - deb
+        uris:
+          - "https://pkgs.tailscale.com/stable/{{ ansible_facts.distribution | lower }}"
+        suites:
+          - "{{ ansible_facts.distribution_release }}"
+        components:
+          - main
+        signed_by: /usr/share/keyrings/tailscale-archive-keyring.gpg
         mode: "0644"
+        state: present
 
     - name: Check Tailscale apt source exists
       ansible.builtin.stat:
-        path: /etc/apt/sources.list.d/tailscale.list
+        path: /etc/apt/sources.list.d/tailscale.sources
       register: tailscale_apt_source
       changed_when: false
 
