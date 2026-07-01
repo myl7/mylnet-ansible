@@ -56,6 +56,8 @@
           - curl
           - wget
           - rsync
+          - ca-certificates
+          - python3-debian # For deb822_repository module
         state: present
 
     - name: Set hostname

@@ -1,0 +1,81 @@
+---
+# Assume apt and amd64 architecture
+- name: Setup Docker
+  hosts: hosts
+  become: true
+
+  vars:
+    docker_distros:
+      - Debian
+      - Ubuntu
+    docker_apt_repo_url: "https://download.docker.com/linux/{{ ansible_facts.distribution | lower }}"
+
+  tasks:
+    - name: Check supported Docker apt source distribution
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution in docker_distros
+        fail_msg: "Docker apt source is configured only for Debian and Ubuntu"
+        quiet: true
+
+    - name: Remove conflicting Docker packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose
+          - docker-compose-v2
+          - docker-doc
+          - podman-docker
+          - containerd
+          - runc
+        state: absent
+
+    - name: Download Docker apt signing key
+      ansible.builtin.get_url:
+        url: "{{ docker_apt_repo_url }}/gpg"
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add Docker apt source
+      ansible.builtin.deb822_repository:
+        name: docker
+        types:
+          - deb
+        uris:
+          - "{{ docker_apt_repo_url }}"
+        suites:
+          - "{{ ansible_facts.distribution_release }}"
+        components:
+          - stable
+        architectures:
+          - amd64
+        signed_by: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+        state: present
+
+    - name: Check Docker apt source exists
+      ansible.builtin.stat:
+        path: /etc/apt/sources.list.d/docker.sources
+      register: docker_apt_source
+      changed_when: false
+
+    - name: Install Docker Engine
+      ansible.builtin.apt:
+        name: docker-ce
+        state: present
+        update_cache: true
+      when: docker_apt_source.stat.exists
+
+    - name: Start and enable Docker
+      ansible.builtin.systemd_service:
+        name: docker
+        state: started
+        enabled: true
+      when: docker_apt_source.stat.exists
+
+    - name: Add user to docker group
+      ansible.builtin.user:
+        name: "{{ username }}"
+        groups: docker
+        append: true
+      when: docker_apt_source.stat.exists
