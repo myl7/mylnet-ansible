@@ -1,0 +1,89 @@
+---
+# Assume apt
+- name: Setup nginx
+  hosts: hosts
+  become: true
+
+  tasks:
+    - name: Install nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+
+    - name: Check nginx is installed
+      ansible.builtin.stat:
+        path: /usr/sbin/nginx
+      register: nginx_bin
+      changed_when: false
+
+    - name: Copy nginx.conf
+      ansible.builtin.copy:
+        src: ../files/nginx/nginx.conf
+        dest: /etc/nginx/nginx.conf
+      when: nginx_bin.stat.exists
+      notify: Reload nginx
+
+    - name: Copy dhparam
+      ansible.builtin.copy:
+        src: ../files/nginx/dhparam
+        dest: /etc/nginx/dhparam
+        owner: root
+        group: root
+        mode: "0644"
+      when: nginx_bin.stat.exists
+      notify: Reload nginx
+
+    - name: Copy nginx snippets
+      ansible.builtin.copy:
+        src: ../files/nginx/snippets/
+        dest: /etc/nginx/snippets/
+        owner: root
+        group: root
+        mode: "0644"
+      when: nginx_bin.stat.exists
+      notify: Reload nginx
+
+    - name: Copy ip site
+      ansible.builtin.copy:
+        src: ../files/nginx/sites-available/ip
+        dest: /etc/nginx/sites-available/ip
+        owner: root
+        group: root
+        mode: "0644"
+      when: nginx_bin.stat.exists
+      notify: Reload nginx
+
+    - name: Enable ip site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/ip
+        dest: /etc/nginx/sites-enabled/ip
+        state: link
+      when: nginx_bin.stat.exists
+      notify: Reload nginx
+
+    - name: Disable default site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      when: nginx_bin.stat.exists
+      notify: Reload nginx
+
+    - name: Start and enable nginx
+      ansible.builtin.systemd_service:
+        name: nginx
+        state: started
+        enabled: true
+      when: nginx_bin.stat.exists
+
+  handlers:
+    - name: Validate nginx config
+      ansible.builtin.command:
+        cmd: nginx -t
+      changed_when: false
+      listen: Reload nginx
+
+    - name: Reload nginx
+      ansible.builtin.command:
+        cmd: nginx -s reload
+      listen: Reload nginx
