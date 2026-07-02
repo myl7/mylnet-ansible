@@ -74,7 +74,6 @@
       ansible.builtin.blockinfile:
         path: /etc/ssh/sshd_config
         insertbefore: BOF
-        marker: "# {mark} ANSIBLE MANAGED MYLNET SSH CONFIG"
         block: |
           PermitRootLogin no
           PasswordAuthentication no
