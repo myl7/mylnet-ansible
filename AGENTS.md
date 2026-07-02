@@ -1,6 +1,8 @@
 Never use any path that is outside this project in the files.
 Example: Changing ./.ssh/id_rsa to ~/.ssh/id_rsa is wrong.
 
+Prefer `restart: always` for disposable Docker containers.
+
 ## Ansible Preference
 
 Prefer simple `lookup('env/file', ...)` rather than `lookup('ansible.builtin.env/file', ...)`.

@@ -83,3 +83,11 @@
         groups: docker
         append: true
       when: docker_apt_source.stat.exists
+
+    - name: Create Docker stack dir
+      ansible.builtin.file:
+        path: /opt/stacks
+        state: directory
+        owner: root
+        group: docker
+        mode: "0775"
