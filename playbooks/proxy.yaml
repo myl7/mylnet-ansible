@@ -1,0 +1,88 @@
+---
+- name: Deploy proxy
+  hosts: sg
+
+  vars_files:
+    - ../secrets.yaml
+
+  vars:
+    proxy_ss_password: "{{ (proxy_ss_passwords | default({})).get(inventory_hostname, '') }}"
+    proxy_nft_rules:
+      - 'add rule inet filter input_ipv4 tcp dport 8388 accept comment "ANSIBLE MANAGED RULE"'
+      - 'add rule inet filter input_ipv4 udp dport 8388 accept comment "ANSIBLE MANAGED RULE"'
+
+  tasks:
+    - name: Check Shadowsocks password is provided
+      ansible.builtin.assert:
+        that:
+          - proxy_ss_password | trim | length > 0
+        fail_msg: 'Set proxy_ss_passwords["{{ inventory_hostname }}"] in secrets.yaml'
+        quiet: true
+
+    - name: Install nftables rules
+      become: true
+      ansible.builtin.copy:
+        content: |
+          #!/usr/sbin/nft -f
+
+          {% for proxy_nft_rule in proxy_nft_rules %}
+          {{ proxy_nft_rule }}
+          {% endfor %}
+        dest: /etc/nftables.d/proxy.nft
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply nftables rules
+      become: true
+      ansible.builtin.script:
+        cmd: >-
+          ../files/ensure_nft.py
+          {{ (ansible_check_mode | default(false)) | ternary('--check', '') }}
+          --
+          {{ item }}
+      register: proxy_nft_apply
+      changed_when: "'changed=true' in proxy_nft_apply.stdout_lines"
+      check_mode: false
+      loop: "{{ proxy_nft_rules }}"
+
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "/opt/stacks/proxy"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render config
+      ansible.builtin.template:
+        src: ../files/proxy/config.yaml.j2
+        dest: "/opt/stacks/proxy/config.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0600"
+      notify: Recreate containers
+
+    - name: Copy compose file
+      ansible.builtin.copy:
+        src: ../files/proxy/compose.yaml
+        dest: "/opt/stacks/proxy/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/proxy
+        state: present
+        remove_orphans: true
+        pull: always
+
+  handlers:
+    - name: Recreate containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/proxy
+        state: present
+        remove_orphans: true
+        recreate: always

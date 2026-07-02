@@ -1,0 +1,9 @@
+services:
+  mihomo:
+    image: metacubex/mihomo
+    restart: always
+    network_mode: host
+    volumes:
+      - ./config.yaml:/root/.config/mihomo/config.yaml:ro
+    logging:
+      driver: local

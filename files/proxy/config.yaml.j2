@@ -1,0 +1,14 @@
+log-level: warning
+
+listeners:
+  - name: ss-in
+    type: shadowsocks
+    listen: 0.0.0.0
+    port: "8388"
+    cipher: 2022-blake3-aes-128-gcm
+    password: "{{ proxy_ss_password }}"
+    udp: true
+
+mode: rule
+rules:
+  - MATCH,DIRECT
