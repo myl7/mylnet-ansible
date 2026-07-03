@@ -17,6 +17,18 @@
       register: nginx_bin
       changed_when: false
 
+    - name: Copy TLS certs and keys
+      ansible.builtin.copy:
+        src: ../secrets/tls/
+        dest: /etc/nginx/tls/
+        owner: root
+        group: root
+        mode: "0600"
+        directory_mode: "0700"
+      when: nginx_bin.stat.exists
+      notify: Reload nginx
+      no_log: true
+
     - name: Copy nginx.conf
       ansible.builtin.copy:
         src: ../files/nginx/nginx.conf
