@@ -8,6 +8,9 @@
 .claude
 .firecrawl
 
+# Ansible
+.ansible
+
 # Credentials
 secrets
 secrets.yaml
