@@ -179,8 +179,8 @@
 
     - name: Render subscription content
       ansible.builtin.template:
-        src: ../files/proxy/sub.yaml.j2
-        dest: /var/www/proxy-sub/sub.yaml
+        src: ../files/proxy/clash.yaml.j2
+        dest: /var/www/proxy-sub/clash.yaml
         owner: root
         group: root
         mode: "0644"
