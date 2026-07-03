@@ -78,12 +78,19 @@
         mode: "0644"
       notify: Recreate containers
 
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: /opt/stacks/proxy
+      register: proxy_stack_dir
+      changed_when: false
+
     - name: Start containers
       community.docker.docker_compose_v2:
         project_src: /opt/stacks/proxy
         state: present
         remove_orphans: true
         pull: always
+      when: proxy_stack_dir.stat.exists
 
   handlers:
     - name: Recreate containers
@@ -92,6 +99,7 @@
         state: present
         remove_orphans: true
         recreate: always
+      when: proxy_stack_dir.stat.exists
 
 - name: Serve proxy subscription
   hosts: sg
@@ -102,6 +110,12 @@
 
   vars:
     proxy_hostnames: "{{ groups.get('proxy', []) | sort }}"
+    proxy_hosts: >-
+      {{
+        dict(proxy_hostnames | zip(
+          proxy_hostnames | map('extract', hostvars, 'ansible_host')
+        ))
+      }}
     proxy_ai_hostname: sg
 
   pre_tasks:
@@ -155,15 +169,6 @@
       loop: "{{ proxy_hostnames }}"
 
   tasks:
-    - name: Build proxy_hosts
-      ansible.builtin.set_fact:
-        proxy_hosts: >-
-          {{
-            dict(proxy_hostnames | zip(
-              proxy_hostnames | map('extract', hostvars, 'ansible_host')
-            ))
-          }}
-
     - name: Create subscription root
       ansible.builtin.file:
         path: /var/www/proxy-sub
@@ -189,11 +194,18 @@
         mode: "0644"
       notify: Reload nginx
 
+    - name: Check subscription nginx site exists
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/proxy-sub
+      register: proxy_sub_site
+      changed_when: false
+
     - name: Enable subscription nginx site
       ansible.builtin.file:
         src: /etc/nginx/sites-available/proxy-sub
         dest: /etc/nginx/sites-enabled/proxy-sub
         state: link
+      when: proxy_sub_site.stat.exists
       notify: Reload nginx
 
   handlers:

@@ -51,6 +51,8 @@ Name these `assert` tasks with the asserted variable names or a clear category a
 Do not use broad names and avoid "required".
 `fail_log` of the `assert` tasks should point out the file to configure the variables unless configured as host/group variables.
 
-Put host-shared local config default and asssertion as `pre_tasks`.
+Put host-shared local config default and asssertion in `pre_tasks`.
+
+To assign a variable during tasks, because ansible variables are lazily evaluated, just put the assignment in `vars`.
 
 Do not add `name` for `ansible.builtin.import_tasks`.
