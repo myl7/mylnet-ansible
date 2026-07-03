@@ -27,6 +27,11 @@ proxy-groups:
   - name: default
     type: select
     proxies:
+      - DIRECT
+      - proxy
+  - name: proxy
+    type: select
+    proxies:
 {% for proxy_host in proxy_hostnames %}
       - {{ proxy_host | to_json }}
 {% endfor %}
@@ -41,6 +46,7 @@ proxy-groups:
   - name: ai
     type: select
     proxies:
+{# AI requires stable IPs, so we do not use the proxy group #}
 {% for proxy_host in proxy_hostnames | move_first(proxy_ai_hostname) %}
       - {{ proxy_host | to_json }}
 {% endfor %}
@@ -50,10 +56,21 @@ proxy-groups:
 {% set anthropic_asns = [399358] %}{# Anthropic #}
 {% set proxy_ai_asns = proxy_ai_asns | default(openai_asns + anthropic_asns) %}
 
+rule-providers:
+  anti-ad:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://anti-ad.net/clash.yaml"
+    path: ./ruleset/anti-ad.yaml
+    interval: 86400
+
 rules:
   - GEOSITE,private,DIRECT
   - GEOIP,private,DIRECT,no-resolve
   - DOMAIN-SUFFIX,ts.net,DIRECT
+
+  - RULE-SET,anti-ad,REJECT
 
   - DOMAIN,downloads.claude.ai,default
   - DOMAIN-KEYWORD,claude,ai
@@ -63,11 +80,12 @@ rules:
   - DOMAIN-SUFFIX,gemini.google.com,ai
   - DOMAIN-SUFFIX,aistudio.google.com,ai
   - DOMAIN-SUFFIX,generativelanguage.googleapis.com,ai
+
+  - GEOSITE,cn,cn
+
 {% for proxy_ai_asn in proxy_ai_asns %}
   - IP-ASN,{{ proxy_ai_asn }},ai
 {% endfor %}
 
-  - GEOSITE,cn,cn
   - GEOIP,CN,cn
-
   - MATCH,default
