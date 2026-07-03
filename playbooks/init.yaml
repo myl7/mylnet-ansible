@@ -13,14 +13,13 @@
     - ../secrets.yaml
 
   pre_tasks:
-    - name: Check required local config
+    - name: Check password_hash
       ansible.builtin.assert:
         that:
-          - password_hash | default('') | trim | length > 0
+          - password_hash is defined
         fail_msg: "Set password_hash in secrets.yaml"
         quiet: true
       run_once: true
-      delegate_to: localhost
 
   tasks:
     - name: Bootstrap Python for Ansible

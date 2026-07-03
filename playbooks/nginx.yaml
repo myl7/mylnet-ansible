@@ -27,7 +27,6 @@
         directory_mode: "0700"
       when: nginx_bin.stat.exists
       notify: Reload nginx
-      no_log: true
 
     - name: Copy nginx.conf
       ansible.builtin.copy:
@@ -89,13 +88,4 @@
       when: nginx_bin.stat.exists
 
   handlers:
-    - name: Validate nginx config
-      ansible.builtin.command:
-        cmd: nginx -t
-      changed_when: false
-      listen: Reload nginx
-
-    - name: Reload nginx
-      ansible.builtin.command:
-        cmd: nginx -s reload
-      listen: Reload nginx
+    - ansible.builtin.import_tasks: handlers/nginx.yaml

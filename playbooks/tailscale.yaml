@@ -1,7 +1,6 @@
 ---
-# Assume apt and an initialized host.
-# Auth keys are read from secrets.yaml at tailscale_auth_keys[inventory_hostname].
-# Prefer one-off auth keys for enrollment; reusable auth keys are also supported.
+# Assume apt.
+# Prefer one-off auth keys for enrollment. Reusable auth keys are also supported.
 - name: Setup Tailscale
   hosts: hosts
   become: true
@@ -14,7 +13,13 @@
       - Debian
       - Ubuntu
     tailscale_apt_repo_url: "https://pkgs.tailscale.com/stable/{{ ansible_facts.distribution | lower }}/{{ ansible_facts.distribution_release }}"
-    tailscale_auth_key: "{{ (tailscale_auth_keys | default({})).get(inventory_hostname, '') }}"
+    tailscale_auth_key: "{{ tailscale_auth_keys.get(inventory_hostname, '') }}"
+
+  pre_tasks:
+    - name: Default tailscale_auth_keys
+      ansible.builtin.set_fact:
+        tailscale_auth_keys: {}
+      when: tailscale_auth_keys is undefined
 
   tasks:
     - name: Check supported Tailscale apt source distribution
@@ -98,7 +103,7 @@
              else {} }}
       when: tailscale_apt_source.stat.exists
 
-    - name: Check Tailscale auth key is provided
+    - name: Check tailscale_auth_key exists
       ansible.builtin.assert:
         that:
           - tailscale_auth_key | trim | length > 0
@@ -116,7 +121,6 @@
           - --timeout=600s
           - "--auth-key={{ tailscale_auth_key }}"
       register: tailscale_up
-      no_log: true
       when:
         - tailscale_apt_source.stat.exists
         - not tailscale_logged_in
