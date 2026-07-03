@@ -9,12 +9,12 @@ sg = { ansible_host = "38.54.16.65" }
 children = ["lightnode"]
 
 [raw.vars]
-ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ inventory_dir }}/../.ssh/known_host_raw"
+ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ inventory_dir }}/../secrets/ssh/known_host_raw"
 
 [lightnode.vars]
 ansible_user = "root"
 ansible_port = 22
-ansible_ssh_private_key_file = "./.ssh/id_rsa"
+ansible_ssh_private_key_file = "./secrets/ssh/id_rsa"
 
 [lightnode.hosts]
 "sg.raw" = { ansible_host = "38.54.16.65" }

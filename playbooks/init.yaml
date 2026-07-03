@@ -141,7 +141,7 @@
       ansible.posix.authorized_key:
         user: "{{ username }}"
         state: present
-        key: "{{ lookup('file', '../.ssh/id_ed25519.pub') }}"
+        key: "{{ lookup('file', '../secrets/ssh/id_ed25519.pub') }}"
       when: ansible_facts.getent_passwd[username] is not none
 
 # CAUTION: Have side effects.
