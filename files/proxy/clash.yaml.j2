@@ -77,9 +77,12 @@ rules:
   - DOMAIN-KEYWORD,anthropic,ai
   - DOMAIN-KEYWORD,chatgpt,ai
   - DOMAIN-KEYWORD,openai,ai
-  - DOMAIN-SUFFIX,gemini.google.com,ai
+  - DOMAIN-KEYWORD,gemini,ai
   - DOMAIN-SUFFIX,aistudio.google.com,ai
   - DOMAIN-SUFFIX,generativelanguage.googleapis.com,ai
+  - DOMAIN-KEYWORD,openrouter,ai
+
+{{ lookup('file', '../secrets/clash_rules_extend.yaml').split('\n')[1:] | join('\n') }}
 
   - GEOSITE,cn,cn
 
