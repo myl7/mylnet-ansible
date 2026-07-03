@@ -258,7 +258,7 @@ def add_rule(rule: Rule) -> None:
             rule.chain,
             *rule.statement.tokens,
             "comment",
-            rule.comment,
+            f'"{rule.comment}"',
         ]
     )
     if result.returncode == 0:

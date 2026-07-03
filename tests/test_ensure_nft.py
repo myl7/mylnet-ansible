@@ -1,6 +1,7 @@
 import contextlib
 import importlib.util
 import io
+import shlex
 import subprocess
 import sys
 import unittest
@@ -174,9 +175,20 @@ class NftCommandTest(unittest.TestCase):
                 "8388",
                 "accept",
                 "comment",
-                "ANSIBLE MANAGED RULE",
+                '"ANSIBLE MANAGED RULE"',
             ]
         )
+
+    def test_add_rule_comment_survives_nft_relexing(self):
+        # nft concatenates its argv with spaces and re-lexes the result, so a
+        # multi-word comment must carry literal quotes to stay one token.
+        with mock.patch.object(ensure_nft, "run_nft", return_value=completed([])) as run_nft:
+            ensure_nft.add_rule(self.rule)
+
+        (argv,), _ = run_nft.call_args
+        relexed = shlex.split(" ".join(argv))
+        comment_index = relexed.index("comment")
+        self.assertEqual(relexed[comment_index + 1 :], ["ANSIBLE MANAGED RULE"])
 
     def test_delete_rule_argv(self):
         with mock.patch.object(ensure_nft, "run_nft", return_value=completed([])) as run_nft:
