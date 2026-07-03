@@ -9,7 +9,7 @@ server {
     root /var/www/proxy-sub;
     autoindex off;
 
-    location = {{ proxy_sub_path }} {
+    location = /{{ proxy_sub_id }} {
         types {}
         default_type text/yaml;
         add_header Cache-Control "no-store";

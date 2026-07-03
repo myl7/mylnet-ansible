@@ -142,11 +142,11 @@
         quiet: true
       run_once: true
 
-    - name: Check proxy_sub_path
+    - name: Check proxy_sub_id
       ansible.builtin.assert:
         that:
-          - proxy_sub_path is defined
-        fail_msg: "Set proxy_sub_path in secrets.yaml"
+          - proxy_sub_id is defined
+        fail_msg: "Set proxy_sub_id in secrets.yaml"
         quiet: true
       run_once: true
 
