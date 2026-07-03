@@ -1,0 +1,4 @@
+---
+proxy_sub_domain: p.myl.moe
+proxy_sub_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+proxy_sub_key: /etc/nginx/tls/cloudflare/myl.moe.key

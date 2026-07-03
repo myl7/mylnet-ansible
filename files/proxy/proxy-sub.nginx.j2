@@ -1,0 +1,22 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ proxy_sub_domain }};
+
+    ssl_certificate {{ proxy_sub_cert }};
+    ssl_certificate_key {{ proxy_sub_key }};
+
+    root /var/www/proxy-sub;
+    autoindex off;
+
+    location = {{ proxy_sub_path }} {
+        types {}
+        default_type text/yaml;
+        add_header Cache-Control "no-store";
+        try_files /sub.yaml =404;
+    }
+
+    location / {
+        return 404;
+    }
+}

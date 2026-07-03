@@ -1,0 +1,73 @@
+log-level: error
+mixed-port: 7890
+allow-lan: false
+ipv6: false
+mode: rule
+
+geodata-mode: true
+geo-auto-update: true
+geo-update-interval: 24
+geox-url:
+  geoip: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+  geosite: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+  asn: "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb"
+
+proxies:
+{% for proxy_host in proxy_hostnames %}
+  - name: {{ proxy_host | to_json }}
+    type: ss
+    server: {{ proxy_hosts[proxy_host] | to_json }}
+    port: 8388
+    cipher: 2022-blake3-aes-128-gcm
+    password: {{ proxy_ss_passwords[proxy_host] | to_json }}
+    udp: true
+{% endfor %}
+
+proxy-groups:
+  - name: default
+    type: select
+    proxies:
+{% for proxy_host in proxy_hostnames %}
+      - {{ proxy_host | to_json }}
+{% endfor %}
+      - DIRECT
+  - name: cn
+    type: select
+    proxies:
+      - DIRECT
+{% for proxy_host in proxy_hostnames %}
+      - {{ proxy_host | to_json }}
+{% endfor %}
+  - name: ai
+    type: select
+    proxies:
+{% for proxy_host in proxy_hostnames | move_first(proxy_ai_hostname) %}
+      - {{ proxy_host | to_json }}
+{% endfor %}
+      - DIRECT
+
+{% set openai_asns = [401518, 401864] %}{# OpenAI #}
+{% set anthropic_asns = [399358] %}{# Anthropic #}
+{% set proxy_ai_asns = proxy_ai_asns | default(openai_asns + anthropic_asns) %}
+
+rules:
+  - GEOSITE,private,DIRECT
+  - GEOIP,private,DIRECT,no-resolve
+  - DOMAIN-SUFFIX,ts.net,DIRECT
+
+  - DOMAIN,downloads.claude.ai,default
+  - DOMAIN-KEYWORD,claude,ai
+  - DOMAIN-KEYWORD,anthropic,ai
+  - DOMAIN-KEYWORD,chatgpt,ai
+  - DOMAIN-KEYWORD,openai,ai
+  - DOMAIN-SUFFIX,gemini.google.com,ai
+  - DOMAIN-SUFFIX,aistudio.google.com,ai
+  - DOMAIN-SUFFIX,generativelanguage.googleapis.com,ai
+{% for proxy_ai_asn in proxy_ai_asns %}
+  - IP-ASN,{{ proxy_ai_asn }},ai
+{% endfor %}
+
+  - GEOSITE,cn,cn
+  - GEOIP,CN,cn
+
+  - MATCH,default

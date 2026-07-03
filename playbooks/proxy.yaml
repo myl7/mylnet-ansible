@@ -1,24 +1,30 @@
 ---
 - name: Deploy proxy
-  hosts: sg
+  hosts: proxy
 
   vars_files:
     - ../secrets.yaml
 
   vars:
-    proxy_ss_password: "{{ (proxy_ss_passwords | default({})).get(inventory_hostname, '') }}"
+    proxy_ss_password: "{{ proxy_ss_passwords.get(inventory_hostname, '') }}"
     proxy_nft_rules:
       - 'add rule inet filter input_ipv4 tcp dport 8388 accept comment "ANSIBLE MANAGED RULE"'
       - 'add rule inet filter input_ipv4 udp dport 8388 accept comment "ANSIBLE MANAGED RULE"'
 
-  tasks:
-    - name: Check Shadowsocks password is provided
+  pre_tasks:
+    - name: Default proxy_ss_passwords
+      ansible.builtin.set_fact:
+        proxy_ss_passwords: {}
+      when: proxy_ss_passwords is undefined
+
+    - name: Check proxy_ss_password
       ansible.builtin.assert:
         that:
           - proxy_ss_password | trim | length > 0
         fail_msg: 'Set proxy_ss_passwords["{{ inventory_hostname }}"] in secrets.yaml'
         quiet: true
 
+  tasks:
     - name: Install nftables rules
       become: true
       ansible.builtin.copy:
@@ -86,3 +92,109 @@
         state: present
         remove_orphans: true
         recreate: always
+
+- name: Serve proxy subscription
+  hosts: sg
+  become: true
+
+  vars_files:
+    - ../secrets.yaml
+
+  vars:
+    proxy_hostnames: "{{ groups.get('proxy', []) | sort }}"
+    proxy_ai_hostname: sg
+
+  pre_tasks:
+    - name: Default proxy_ss_passwords
+      ansible.builtin.set_fact:
+        proxy_ss_passwords: {}
+      when: proxy_ss_passwords is undefined
+
+    - name: Check proxy_ai_hostname
+      ansible.builtin.assert:
+        that:
+          - proxy_ai_hostname in proxy_hostnames
+        fail_msg: "Set proxy_ai_hostname to a host in the proxy group"
+        quiet: true
+      run_once: true
+
+    - name: Check proxy_sub_domain, proxy_sub_cert, and proxy_sub_key
+      ansible.builtin.assert:
+        that:
+          - proxy_sub_domain is defined
+          - proxy_sub_cert is defined
+          - proxy_sub_key is defined
+        fail_msg: "Set proxy_sub_domain, proxy_sub_cert and proxy_sub_key"
+        quiet: true
+      run_once: true
+
+    - name: Check proxy_sub_path
+      ansible.builtin.assert:
+        that:
+          - proxy_sub_path is defined
+        fail_msg: "Set proxy_sub_path in secrets.yaml"
+        quiet: true
+      run_once: true
+
+    - name: Check ansible_host for each proxy host
+      ansible.builtin.assert:
+        that:
+          - hostvars[item].ansible_host | default('') | string | trim | length > 0
+        fail_msg: "Set ansible_host for proxy host {{ item }}"
+        quiet: true
+      run_once: true
+      loop: "{{ proxy_hostnames }}"
+
+    - name: Check proxy_ss_passwords for each proxy host
+      ansible.builtin.assert:
+        that:
+          - proxy_ss_passwords[item] is defined
+        fail_msg: 'Set proxy_ss_passwords["{{ item }}"] in secrets.yaml'
+        quiet: true
+      run_once: true
+      loop: "{{ proxy_hostnames }}"
+
+  tasks:
+    - name: Build proxy_hosts
+      ansible.builtin.set_fact:
+        proxy_hosts: >-
+          {{
+            dict(proxy_hostnames | zip(
+              proxy_hostnames | map('extract', hostvars, 'ansible_host')
+            ))
+          }}
+
+    - name: Create subscription root
+      ansible.builtin.file:
+        path: /var/www/proxy-sub
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render subscription content
+      ansible.builtin.template:
+        src: ../files/proxy/sub.yaml.j2
+        dest: /var/www/proxy-sub/sub.yaml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Render subscription nginx site
+      ansible.builtin.template:
+        src: ../files/proxy/proxy-sub.nginx.j2
+        dest: /etc/nginx/sites-available/proxy-sub
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable subscription nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/proxy-sub
+        dest: /etc/nginx/sites-enabled/proxy-sub
+        state: link
+      notify: Reload nginx
+
+  handlers:
+    - ansible.builtin.import_tasks: handlers/nginx.yaml
