@@ -5,3 +5,6 @@ proxy_sub_key: /etc/nginx/tls/cloudflare/myl.moe.key
 vaultwarden_domain: key.myl.moe
 vaultwarden_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 vaultwarden_key: /etc/nginx/tls/cloudflare/myl.moe.key
+gitea_domain: git.myl.moe
+gitea_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+gitea_key: /etc/nginx/tls/cloudflare/myl.moe.key

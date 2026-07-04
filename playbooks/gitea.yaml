@@ -1,0 +1,104 @@
+---
+- name: Deploy gitea
+  hosts: sg
+
+  vars:
+    gitea_local_port: 50001
+    gitea_ssh_bind: "{{ gitea_ssh_ip.stdout | trim }}"
+
+  pre_tasks:
+    - name: Check gitea_domain, gitea_cert, and gitea_key
+      ansible.builtin.assert:
+        that:
+          - gitea_domain is defined
+          - gitea_cert is defined
+          - gitea_key is defined
+        fail_msg: "Set gitea_domain, gitea_cert and gitea_key"
+        quiet: true
+
+  tasks:
+    # Gitea requires an IP to bind its SSH port. We use the Tailscale IP.
+    - name: Get Tailscale IPv4
+      become: true
+      ansible.builtin.command:
+        cmd: tailscale ip -4
+      register: gitea_ssh_ip
+      changed_when: false
+      check_mode: false
+
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: /opt/stacks/gitea
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create data dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/gitea/data
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: ../files/gitea/compose.yaml.j2
+        dest: /opt/stacks/gitea/compose.yaml
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: /opt/stacks/gitea
+      register: gitea_stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/gitea
+        state: present
+        remove_orphans: true
+        pull: always
+      when: gitea_stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: ../files/gitea/gitea.nginx.j2
+        dest: /etc/nginx/sites-available/gitea
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/gitea
+      register: gitea_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/gitea
+        dest: /etc/nginx/sites-enabled/gitea
+        state: link
+      when: gitea_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Recreate containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/gitea
+        state: present
+        remove_orphans: true
+        recreate: always
+      when: gitea_stack_dir_stat.stat.exists
+
+    - ansible.builtin.import_tasks: handlers/nginx.yaml

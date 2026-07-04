@@ -1,0 +1,16 @@
+services:
+  gitea:
+    image: docker.gitea.com/gitea
+    restart: always
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    volumes:
+      - /srv/gitea/data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "127.0.0.1:{{ gitea_local_port }}:3000"
+      - "{{ gitea_ssh_bind }}:22:22"
+    logging:
+      driver: local
