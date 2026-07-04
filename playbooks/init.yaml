@@ -143,7 +143,8 @@
         key: "{{ lookup('file', '../secrets/ssh/id_ed25519.pub') }}"
       when: ansible_facts.getent_passwd[username] is not none
 
-# CAUTION: Have side effects.
+# CAUTION: Have side effects. Already-initialized hosts should NOT run this play and should instead reload config manually.
+# This is because, e.g., reloading nftables removes the rules added by, e.g., Docker and Tailscale.
 # Reloading nftables should reuse the legacy SSH connection after using new SSH config.
 # If failed, manually reload nftables.
 - name: Apply nftables and SSH config

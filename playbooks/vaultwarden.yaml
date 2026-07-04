@@ -1,0 +1,104 @@
+---
+- name: Deploy vaultwarden
+  hosts: sg
+
+  vars_files:
+    - ../secrets.yaml
+
+  vars:
+    vaultwarden_local_port: 50002
+
+  pre_tasks:
+    - name: Check vaultwarden_domain, vaultwarden_cert, and vaultwarden_key
+      ansible.builtin.assert:
+        that:
+          - vaultwarden_domain is defined
+          - vaultwarden_cert is defined
+          - vaultwarden_key is defined
+        fail_msg: "Set vaultwarden_domain, vaultwarden_cert and vaultwarden_key"
+        quiet: true
+
+    - name: Check vaultwarden_admin_token
+      ansible.builtin.assert:
+        that:
+          - vaultwarden_admin_token is defined
+        fail_msg: "Set vaultwarden_admin_token in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: /opt/stacks/vaultwarden
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create data dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/vaultwarden/data
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: ../files/vaultwarden/compose.yaml.j2
+        dest: /opt/stacks/vaultwarden/compose.yaml
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: /opt/stacks/vaultwarden
+      register: vaultwarden_stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/vaultwarden
+        state: present
+        remove_orphans: true
+        pull: always
+      when: vaultwarden_stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: ../files/vaultwarden/vaultwarden.nginx.j2
+        dest: /etc/nginx/sites-available/vaultwarden
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/vaultwarden
+      register: vaultwarden_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/vaultwarden
+        dest: /etc/nginx/sites-enabled/vaultwarden
+        state: link
+      when: vaultwarden_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Recreate containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/vaultwarden
+        state: present
+        remove_orphans: true
+        recreate: always
+      when: vaultwarden_stack_dir_stat.stat.exists
+
+    - ansible.builtin.import_tasks: handlers/nginx.yaml

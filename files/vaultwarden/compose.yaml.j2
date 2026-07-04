@@ -1,0 +1,14 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest-alpine
+    restart: always
+    environment:
+      - DOMAIN=https://{{ vaultwarden_domain }}
+      - SIGNUPS_ALLOWED=false
+      - ADMIN_TOKEN={{ vaultwarden_admin_token | replace('$', '$$') }}
+    volumes:
+      - /srv/vaultwarden/data:/data
+    ports:
+      - "127.0.0.1:{{ vaultwarden_local_port }}:80"
+    logging:
+      driver: local
