@@ -1,0 +1,67 @@
+---
+- name: Mount share
+  hosts: hosts
+
+  vars_files:
+    - ../secrets.yaml
+
+  pre_tasks:
+    - name: Check share_smb_host, share_smb_username, and share_smb_password
+      ansible.builtin.assert:
+        that:
+          - share_smb_username is defined
+          - share_smb_password is defined
+        fail_msg: "Set share_smb_host, share_smb_username, and share_smb_password in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Install packages
+      become: true
+      ansible.builtin.apt:
+        name:
+          - cifs-utils
+        state: present
+        update_cache: true
+
+    - name: Create SMB credentials dir
+      become: true
+      ansible.builtin.file:
+        path: /etc/samba/credentials
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Write SMB credentials
+      become: true
+      ansible.builtin.copy:
+        content: |
+          username={{ share_smb_username }}
+          password={{ share_smb_password }}
+        dest: /etc/samba/credentials/share
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Configure share mount
+      become: true
+      ansible.posix.mount:
+        path: /srv/share
+        src: //{{ share_smb_host }}/share
+        fstype: cifs
+        opts: credentials=/etc/samba/credentials/share,vers=3.11,uid=1000,gid=1000,noperm,file_mode=0777,dir_mode=0777,iocharset=utf8,actimeo=30,rsize=1048576,wsize=1048576,soft,nofail,_netdev,x-systemd.automount,x-systemd.idle-timeout=600,echo_interval=60
+        state: present
+      notify:
+        - Reload systemd daemon
+        - Start share automount
+
+  handlers:
+    - name: Reload systemd daemon
+      become: true
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Start share automount
+      become: true
+      ansible.builtin.command:
+        cmd: systemctl start srv-share.automount
