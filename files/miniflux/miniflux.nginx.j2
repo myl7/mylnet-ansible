@@ -1,0 +1,13 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ miniflux_domain }};
+
+    ssl_certificate {{ miniflux_cert }};
+    ssl_certificate_key {{ miniflux_key }};
+
+    location / {
+        proxy_pass http://127.0.0.1:{{ miniflux_local_port }};
+        include snippets/rproxy.conf;
+    }
+}

@@ -8,3 +8,6 @@ vaultwarden_key: /etc/nginx/tls/cloudflare/myl.moe.key
 gitea_domain: git.myl.moe
 gitea_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 gitea_key: /etc/nginx/tls/cloudflare/myl.moe.key
+miniflux_domain: read.myl.moe
+miniflux_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+miniflux_key: /etc/nginx/tls/cloudflare/myl.moe.key

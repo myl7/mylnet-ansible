@@ -1,0 +1,110 @@
+---
+- name: Deploy miniflux
+  hosts: sg
+
+  vars_files:
+    - ../secrets.yaml
+
+  vars:
+    miniflux_local_port: 50003
+
+  pre_tasks:
+    - name: Default miniflux_admin_username
+      ansible.builtin.set_fact:
+        miniflux_admin_username: admin
+      when: miniflux_admin_username is undefined
+
+    - name: Check miniflux_domain, miniflux_cert, and miniflux_key
+      ansible.builtin.assert:
+        that:
+          - miniflux_domain is defined
+          - miniflux_cert is defined
+          - miniflux_key is defined
+        fail_msg: "Set miniflux_domain, miniflux_cert and miniflux_key"
+        quiet: true
+
+    - name: Check miniflux_db_password and miniflux_admin_password
+      ansible.builtin.assert:
+        that:
+          - miniflux_db_password is defined
+          - miniflux_admin_password is defined
+        fail_msg: "Set miniflux_db_password and miniflux_admin_password in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: /opt/stacks/miniflux
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create db dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/miniflux/db
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: ../files/miniflux/compose.yaml.j2
+        dest: /opt/stacks/miniflux/compose.yaml
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: /opt/stacks/miniflux
+      register: miniflux_stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/miniflux
+        state: present
+        remove_orphans: true
+        pull: always
+      when: miniflux_stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: ../files/miniflux/miniflux.nginx.j2
+        dest: /etc/nginx/sites-available/miniflux
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/miniflux
+      register: miniflux_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/miniflux
+        dest: /etc/nginx/sites-enabled/miniflux
+        state: link
+      when: miniflux_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Recreate containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/miniflux
+        state: present
+        remove_orphans: true
+        recreate: always
+      when: miniflux_stack_dir_stat.stat.exists
+
+    - ansible.builtin.import_tasks: handlers/nginx.yaml

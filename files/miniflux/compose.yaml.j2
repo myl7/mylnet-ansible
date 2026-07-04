@@ -1,0 +1,35 @@
+services:
+  miniflux:
+    image: miniflux/miniflux
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - BASE_URL=https://{{ miniflux_domain }}/
+      - DATABASE_URL=postgres://miniflux:{{ miniflux_db_password | urlencode }}@db/miniflux?sslmode=disable
+      - RUN_MIGRATIONS=1
+      - CREATE_ADMIN=1
+      - ADMIN_USERNAME={{ miniflux_admin_username }}
+      - ADMIN_PASSWORD={{ miniflux_admin_password | replace('$', '$$') }}
+    ports:
+      - "127.0.0.1:{{ miniflux_local_port }}:8080"
+    healthcheck:
+      test: ["CMD", "/usr/bin/miniflux", "-healthcheck", "auto"]
+    logging:
+      driver: local
+
+  db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=miniflux
+      - POSTGRES_PASSWORD={{ miniflux_db_password | replace('$', '$$') }}
+    volumes:
+      - /srv/miniflux/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "miniflux"]
+      interval: 10s
+      start_period: 30s
+    logging:
+      driver: local
