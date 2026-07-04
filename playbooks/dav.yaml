@@ -1,0 +1,123 @@
+---
+- name: Deploy dav
+  hosts: sg
+
+  vars_files:
+    - ../secrets.yaml
+
+  vars:
+    dav_local_port: 50004
+
+  pre_tasks:
+    - name: Check dav_domain, dav_cert, and dav_key
+      ansible.builtin.assert:
+        that:
+          - dav_domain is defined
+          - dav_cert is defined
+          - dav_key is defined
+        fail_msg: "Set dav_domain, dav_cert and dav_key"
+        quiet: true
+
+  tasks:
+    - name: Install packages
+      become: true
+      ansible.builtin.apt:
+        name:
+          - rclone
+          - libnginx-mod-http-fancyindex
+        state: present
+        update_cache: true
+
+    # rclone WebDAV backend, buffering writes in a local VFS cache so the SMB
+    # side never sees nginx-style temp/rename churn.
+
+    - name: Create rclone cache dir
+      become: true
+      ansible.builtin.file:
+        path: /var/cache/rclone/dav
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0700"
+
+    - name: Render rclone dav service
+      become: true
+      ansible.builtin.template:
+        src: ../files/dav/rclone-dav.service.j2
+        dest: /etc/systemd/system/rclone-dav.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart rclone dav
+
+    - name: Check rclone dav service exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/systemd/system/rclone-dav.service
+      register: dav_service
+      changed_when: false
+
+    - name: Start and enable rclone dav
+      become: true
+      ansible.builtin.systemd_service:
+        name: rclone-dav
+        state: started
+        enabled: true
+        daemon_reload: true
+      when: dav_service.stat.exists
+
+    - name: Create htpasswd dir
+      become: true
+      ansible.builtin.file:
+        path: /etc/nginx/htpasswd
+        state: directory
+        owner: root
+        group: www-data
+        mode: "0750"
+
+    - name: Write htpasswd
+      become: true
+      ansible.builtin.copy:
+        src: ../secrets/htpasswd/dav
+        dest: /etc/nginx/htpasswd/dav
+        owner: root
+        group: www-data
+        mode: "0640"
+      notify: Reload nginx
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: ../files/dav/dav.nginx.j2
+        dest: /etc/nginx/sites-available/dav
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/dav
+      register: dav_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/dav
+        dest: /etc/nginx/sites-enabled/dav
+        state: link
+      when: dav_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Restart rclone dav
+      become: true
+      ansible.builtin.systemd_service:
+        name: rclone-dav
+        state: restarted
+        daemon_reload: true
+      when: dav_service.stat.exists
+
+    - ansible.builtin.import_tasks: handlers/nginx.yaml

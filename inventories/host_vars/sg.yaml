@@ -11,3 +11,6 @@ gitea_key: /etc/nginx/tls/cloudflare/myl.moe.key
 miniflux_domain: read.myl.moe
 miniflux_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 miniflux_key: /etc/nginx/tls/cloudflare/myl.moe.key
+dav_domain: dav.myl.moe
+dav_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+dav_key: /etc/nginx/tls/cloudflare/myl.moe.key

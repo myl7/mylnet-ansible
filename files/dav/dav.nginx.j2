@@ -1,0 +1,33 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ dav_domain }};
+
+    ssl_certificate {{ dav_cert }};
+    ssl_certificate_key {{ dav_key }};
+
+    location /public/ {
+        root /srv/share/dav;
+        fancyindex on;
+        fancyindex_localtime on;
+        fancyindex_time_format "%Y-%m-%d %T %z";
+        fancyindex_default_sort date_desc;
+        fancyindex_exact_size off;
+        fancyindex_name_length 80;
+
+        include snippets/rproxy.conf;
+
+        limit_except GET HEAD {
+            auth_basic "dav";
+            auth_basic_user_file /etc/nginx/htpasswd/dav;
+            proxy_pass http://127.0.0.1:{{ dav_local_port }};
+        }
+    }
+
+    location / {
+        auth_basic "dav";
+        auth_basic_user_file /etc/nginx/htpasswd/dav;
+        proxy_pass http://127.0.0.1:{{ dav_local_port }};
+        include snippets/rproxy.conf;
+    }
+}

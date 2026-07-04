@@ -1,0 +1,24 @@
+[Unit]
+Description=rclone WebDAV server for {{ dav_domain }}
+After=network-online.target
+Wants=network-online.target
+# Never give up restarting: the SMB backend may be offline for about a day.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User={{ username }}
+Group={{ username }}
+ExecStart=/usr/bin/rclone serve webdav /srv/share/dav \
+    --addr 127.0.0.1:{{ dav_local_port }} \
+    --vfs-cache-mode writes \
+    --cache-dir /var/cache/rclone/dav \
+    --vfs-cache-max-size 1G \
+    --dir-cache-time 1m \
+    --log-level INFO \
+    --log-systemd
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
