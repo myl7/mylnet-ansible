@@ -1,7 +1,7 @@
 ---
 # Assume apt
 - name: Setup nginx
-  hosts: hosts
+  hosts: web
   become: true
 
   tasks:

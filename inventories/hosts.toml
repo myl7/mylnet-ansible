@@ -4,12 +4,17 @@ ansible_port = 50000
 
 [hosts.hosts]
 sg = { ansible_host = "38.54.16.65" }
+bwh = { ansible_host = "104.243.29.231" }
+
+[web.hosts]
+sg = {}
 
 [proxy.hosts]
 sg = {}
+bwh = {}
 
 [raw]
-children = ["lightnode"]
+children = ["lightnode", "bandwagon"]
 
 [raw.vars]
 ansible_ssh_common_args = "-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={{ inventory_dir }}/../secrets/ssh/known_host_raw"
@@ -21,3 +26,10 @@ ansible_ssh_private_key_file = "./secrets/ssh/id_rsa"
 
 [lightnode.hosts]
 "sg.raw" = { ansible_host = "38.54.16.65" }
+
+[bandwagon.vars]
+ansible_user = "root"
+ansible_port = 50000
+
+[bandwagon.hosts]
+"bwh.raw" = { ansible_host = "104.243.29.231" }

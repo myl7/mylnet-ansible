@@ -14,6 +14,7 @@
       - Ubuntu
     tailscale_apt_repo_url: "https://pkgs.tailscale.com/stable/{{ ansible_facts.distribution | lower }}/{{ ansible_facts.distribution_release }}"
     tailscale_auth_key: "{{ tailscale_auth_keys.get(inventory_hostname, '') }}"
+    # TODO: Allow to use hostname or another name as the machine name, i.e., a mapping from hostname to machine name, empty / undefined to use hostnames.
 
   pre_tasks:
     - name: Default tailscale_auth_keys
