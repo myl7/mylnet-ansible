@@ -1,0 +1,94 @@
+---
+- name: Deploy uptime
+  hosts: sg
+
+  vars:
+    uptime_local_port: 50005
+
+  pre_tasks:
+    - name: Check uptime_domain, uptime_cert, and uptime_key
+      ansible.builtin.assert:
+        that:
+          - uptime_domain is defined
+          - uptime_cert is defined
+          - uptime_key is defined
+        fail_msg: "Set uptime_domain, uptime_cert and uptime_key"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: /opt/stacks/uptime
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create data dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/uptime/data
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: ../files/uptime/compose.yaml.j2
+        dest: /opt/stacks/uptime/compose.yaml
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: /opt/stacks/uptime
+      register: uptime_stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/uptime
+        state: present
+        remove_orphans: true
+        pull: always
+      when: uptime_stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: ../files/uptime/uptime.nginx.j2
+        dest: /etc/nginx/sites-available/uptime
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/uptime
+      register: uptime_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/uptime
+        dest: /etc/nginx/sites-enabled/uptime
+        state: link
+      when: uptime_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Recreate containers
+      community.docker.docker_compose_v2:
+        project_src: /opt/stacks/uptime
+        state: present
+        remove_orphans: true
+        recreate: always
+      when: uptime_stack_dir_stat.stat.exists
+
+    - ansible.builtin.import_tasks: handlers/nginx.yaml
