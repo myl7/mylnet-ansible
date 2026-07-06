@@ -14,13 +14,14 @@
       - Ubuntu
     tailscale_apt_repo_url: "https://pkgs.tailscale.com/stable/{{ ansible_facts.distribution | lower }}/{{ ansible_facts.distribution_release }}"
     tailscale_auth_key: "{{ tailscale_auth_keys.get(inventory_hostname, '') }}"
-    # TODO: Allow to use hostname or another name as the machine name, i.e., a mapping from hostname to machine name, empty / undefined to use hostnames.
+    tailscale_machine_name: "{{ tailscale_machine_names.get(inventory_hostname, inventory_hostname_short) | default(inventory_hostname_short, true) }}"
 
   pre_tasks:
-    - name: Default tailscale_auth_keys
+    - name: Default Tailscale maps
       ansible.builtin.set_fact:
-        tailscale_auth_keys: {}
-      when: tailscale_auth_keys is undefined
+        tailscale_auth_keys: "{{ tailscale_auth_keys if tailscale_auth_keys is defined else {} }}"
+        tailscale_machine_names: "{{ tailscale_machine_names if tailscale_machine_names is defined else {} }}"
+      when: tailscale_auth_keys is undefined or tailscale_machine_names is undefined
 
   tasks:
     - name: Check supported Tailscale apt source distribution
@@ -94,9 +95,10 @@
       check_mode: false
       when: tailscale_apt_source.stat.exists
 
-    - name: Set Tailscale login state fact
+    - name: Set Tailscale status facts
       ansible.builtin.set_fact:
         tailscale_logged_in: "{{ tailscale_status_json.HaveNodeKey | default(false) | bool }}"
+        tailscale_current_machine_name: "{{ tailscale_status_json.Self.HostName | default('') }}"
       vars:
         tailscale_status_json: >-
           {{ (tailscale_status.stdout | from_json)
@@ -121,7 +123,19 @@
           - up
           - --timeout=600s
           - "--auth-key={{ tailscale_auth_key }}"
+          - "--hostname={{ tailscale_machine_name }}"
       register: tailscale_up
       when:
         - tailscale_apt_source.stat.exists
         - not tailscale_logged_in
+
+    - name: Update Tailscale machine name
+      ansible.builtin.command:
+        argv:
+          - tailscale
+          - set
+          - "--hostname={{ tailscale_machine_name }}"
+      when:
+        - tailscale_apt_source.stat.exists
+        - tailscale_logged_in
+        - tailscale_current_machine_name != tailscale_machine_name
