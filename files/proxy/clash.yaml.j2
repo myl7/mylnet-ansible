@@ -32,7 +32,7 @@ proxy-groups:
   - name: proxy
     type: select
     proxies:
-{% for proxy_host in proxy_hostnames %}
+{% for proxy_host in proxy_hostnames | move_first(proxy_proxy_hostname) %}
       - {{ proxy_host | to_json }}
 {% endfor %}
       - DIRECT
