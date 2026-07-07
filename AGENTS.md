@@ -5,6 +5,8 @@ Prefer `restart: always` for disposable Docker containers.
 Prefer simple `lookup('env/file', ...)` rather than `lookup('ansible.builtin.env/file', ...)`.
 Prefer simple relative path from the playbook rather than `playbook_dir ~ '/.../...'`.
 
+For long config files in `copy` tasks, prefer files or templates rather than inline `content`.
+
 Do not add `no_log` or use weired `owner/group/mode` just because a task handles secrets.
 Control and managed node logs are trusted in this project.
 Secrets can appear in them.

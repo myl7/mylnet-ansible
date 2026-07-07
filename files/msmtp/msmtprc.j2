@@ -1,0 +1,14 @@
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /var/log/msmtp.log
+
+account        default
+host           {{ system_smtp_host }}
+port           {{ system_smtp_port }}
+from           {{ system_smtp_from }}
+user           {{ system_smtp_username }}
+password       {{ system_smtp_password }}
+
+aliases        /etc/aliases
