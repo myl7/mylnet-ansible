@@ -4,6 +4,7 @@
 
   vars:
     uptime_local_port: 50005
+    stack_dir: /opt/stacks/uptime
 
   pre_tasks:
     - name: Check uptime_domain, uptime_cert, and uptime_key
@@ -18,7 +19,7 @@
   tasks:
     - name: Create stack dir
       ansible.builtin.file:
-        path: /opt/stacks/uptime
+        path: "{{ stack_dir }}"
         state: directory
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -36,7 +37,7 @@
     - name: Render compose file
       ansible.builtin.template:
         src: ../files/uptime/compose.yaml.j2
-        dest: /opt/stacks/uptime/compose.yaml
+        dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
@@ -44,17 +45,17 @@
 
     - name: Check stack dir exists
       ansible.builtin.stat:
-        path: /opt/stacks/uptime
-      register: uptime_stack_dir_stat
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
       changed_when: false
 
     - name: Start containers
       community.docker.docker_compose_v2:
-        project_src: /opt/stacks/uptime
+        project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: uptime_stack_dir_stat.stat.exists
+      when: stack_dir_stat.stat.exists
 
     - name: Render nginx site
       become: true
@@ -83,12 +84,5 @@
       notify: Reload nginx
 
   handlers:
-    - name: Recreate containers
-      community.docker.docker_compose_v2:
-        project_src: /opt/stacks/uptime
-        state: present
-        remove_orphans: true
-        recreate: always
-      when: uptime_stack_dir_stat.stat.exists
-
+    - ansible.builtin.import_tasks: handlers/docker.yaml
     - ansible.builtin.import_tasks: handlers/nginx.yaml

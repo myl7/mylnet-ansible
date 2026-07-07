@@ -7,6 +7,7 @@
 
   vars:
     vaultwarden_local_port: 50002
+    stack_dir: /opt/stacks/vaultwarden
 
   pre_tasks:
     - name: Check vaultwarden_domain, vaultwarden_cert, and vaultwarden_key
@@ -28,7 +29,7 @@
   tasks:
     - name: Create stack dir
       ansible.builtin.file:
-        path: /opt/stacks/vaultwarden
+        path: "{{ stack_dir }}"
         state: directory
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -46,7 +47,7 @@
     - name: Render compose file
       ansible.builtin.template:
         src: ../files/vaultwarden/compose.yaml.j2
-        dest: /opt/stacks/vaultwarden/compose.yaml
+        dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
@@ -54,17 +55,17 @@
 
     - name: Check stack dir exists
       ansible.builtin.stat:
-        path: /opt/stacks/vaultwarden
-      register: vaultwarden_stack_dir_stat
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
       changed_when: false
 
     - name: Start containers
       community.docker.docker_compose_v2:
-        project_src: /opt/stacks/vaultwarden
+        project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: vaultwarden_stack_dir_stat.stat.exists
+      when: stack_dir_stat.stat.exists
 
     - name: Render nginx site
       become: true
@@ -93,12 +94,5 @@
       notify: Reload nginx
 
   handlers:
-    - name: Recreate containers
-      community.docker.docker_compose_v2:
-        project_src: /opt/stacks/vaultwarden
-        state: present
-        remove_orphans: true
-        recreate: always
-      when: vaultwarden_stack_dir_stat.stat.exists
-
+    - ansible.builtin.import_tasks: handlers/docker.yaml
     - ansible.builtin.import_tasks: handlers/nginx.yaml

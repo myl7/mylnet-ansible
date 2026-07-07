@@ -7,6 +7,7 @@
 
   vars:
     miniflux_local_port: 50003
+    stack_dir: /opt/stacks/miniflux
 
   pre_tasks:
     - name: Default miniflux_admin_username
@@ -34,7 +35,7 @@
   tasks:
     - name: Create stack dir
       ansible.builtin.file:
-        path: /opt/stacks/miniflux
+        path: "{{ stack_dir }}"
         state: directory
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -52,7 +53,7 @@
     - name: Render compose file
       ansible.builtin.template:
         src: ../files/miniflux/compose.yaml.j2
-        dest: /opt/stacks/miniflux/compose.yaml
+        dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
@@ -60,17 +61,17 @@
 
     - name: Check stack dir exists
       ansible.builtin.stat:
-        path: /opt/stacks/miniflux
-      register: miniflux_stack_dir_stat
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
       changed_when: false
 
     - name: Start containers
       community.docker.docker_compose_v2:
-        project_src: /opt/stacks/miniflux
+        project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: miniflux_stack_dir_stat.stat.exists
+      when: stack_dir_stat.stat.exists
 
     - name: Render nginx site
       become: true
@@ -99,12 +100,5 @@
       notify: Reload nginx
 
   handlers:
-    - name: Recreate containers
-      community.docker.docker_compose_v2:
-        project_src: /opt/stacks/miniflux
-        state: present
-        remove_orphans: true
-        recreate: always
-      when: miniflux_stack_dir_stat.stat.exists
-
+    - ansible.builtin.import_tasks: handlers/docker.yaml
     - ansible.builtin.import_tasks: handlers/nginx.yaml

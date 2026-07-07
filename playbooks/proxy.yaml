@@ -6,6 +6,7 @@
     - ../secrets.yaml
 
   vars:
+    stack_dir: /opt/stacks/proxy
     proxy_ss_password: "{{ proxy_ss_passwords.get(inventory_hostname, '') }}"
     proxy_nft_rules:
       - 'add rule inet filter input_ipv4 tcp dport 8388 accept comment "ANSIBLE MANAGED RULE"'
@@ -54,7 +55,7 @@
 
     - name: Create stack dir
       ansible.builtin.file:
-        path: "/opt/stacks/proxy"
+        path: "{{ stack_dir }}"
         state: directory
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -63,7 +64,7 @@
     - name: Render config
       ansible.builtin.template:
         src: ../files/proxy/config.yaml.j2
-        dest: "/opt/stacks/proxy/config.yaml"
+        dest: "{{ stack_dir }}/config.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0600"
@@ -72,7 +73,7 @@
     - name: Copy compose file
       ansible.builtin.copy:
         src: ../files/proxy/compose.yaml
-        dest: "/opt/stacks/proxy/compose.yaml"
+        dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
@@ -80,26 +81,20 @@
 
     - name: Check stack dir exists
       ansible.builtin.stat:
-        path: /opt/stacks/proxy
-      register: proxy_stack_dir
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
       changed_when: false
 
     - name: Start containers
       community.docker.docker_compose_v2:
-        project_src: /opt/stacks/proxy
+        project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: proxy_stack_dir.stat.exists
+      when: stack_dir_stat.stat.exists
 
   handlers:
-    - name: Recreate containers
-      community.docker.docker_compose_v2:
-        project_src: /opt/stacks/proxy
-        state: present
-        remove_orphans: true
-        recreate: always
-      when: proxy_stack_dir.stat.exists
+    - ansible.builtin.import_tasks: handlers/docker.yaml
 
 - name: Serve proxy subscription
   hosts: sg

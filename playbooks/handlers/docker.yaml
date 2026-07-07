@@ -1,0 +1,8 @@
+---
+- name: Recreate containers
+  community.docker.docker_compose_v2:
+    project_src: "{{ stack_dir }}"
+    state: present
+    remove_orphans: true
+    recreate: always
+  when: stack_dir_stat.stat.exists

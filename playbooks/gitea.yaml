@@ -5,6 +5,7 @@
   vars:
     gitea_local_port: 50001
     gitea_ssh_bind: "{{ gitea_ssh_ip.stdout | trim }}"
+    stack_dir: /opt/stacks/gitea
 
   pre_tasks:
     - name: Check gitea_domain, gitea_cert, and gitea_key
@@ -28,7 +29,7 @@
 
     - name: Create stack dir
       ansible.builtin.file:
-        path: /opt/stacks/gitea
+        path: "{{ stack_dir }}"
         state: directory
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -46,7 +47,7 @@
     - name: Render compose file
       ansible.builtin.template:
         src: ../files/gitea/compose.yaml.j2
-        dest: /opt/stacks/gitea/compose.yaml
+        dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
@@ -54,17 +55,17 @@
 
     - name: Check stack dir exists
       ansible.builtin.stat:
-        path: /opt/stacks/gitea
-      register: gitea_stack_dir_stat
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
       changed_when: false
 
     - name: Start containers
       community.docker.docker_compose_v2:
-        project_src: /opt/stacks/gitea
+        project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: gitea_stack_dir_stat.stat.exists
+      when: stack_dir_stat.stat.exists
 
     - name: Render nginx site
       become: true
@@ -93,12 +94,5 @@
       notify: Reload nginx
 
   handlers:
-    - name: Recreate containers
-      community.docker.docker_compose_v2:
-        project_src: /opt/stacks/gitea
-        state: present
-        remove_orphans: true
-        recreate: always
-      when: gitea_stack_dir_stat.stat.exists
-
+    - ansible.builtin.import_tasks: handlers/docker.yaml
     - ansible.builtin.import_tasks: handlers/nginx.yaml
