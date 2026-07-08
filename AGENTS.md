@@ -9,14 +9,15 @@ Do not use `../files/...`, `../templates/...`, or `playbook_dir` in `copy.src` a
 
 For long config files in `copy` tasks, prefer files or templates rather than inline `content`.
 
-Do not add `no_log` or use weired `owner/group/mode` just because a task handles secrets.
+Do not add `no_log` or use weird `owner/group/mode` just because a task handles secrets.
 Control and managed node logs are trusted in this project.
 Secrets can appear in them.
 
 Never use `ansible_check_mode` in `when` checks of tasks.
 
-If a file is almost always expected to exist, prefer not to set `owner`, `group`, and `mode`.
-Otherwise, prefer to set them.
+Avoid implicit file creation.
+If the module supports `create` and the target file is expected to exist, set `create: false`.
+Otherwise, e,g, for `copy` and `template`, which do not have `create`, set `owner`, `group`, and `mode`.
 
 Host/group variables in `inventories/group_vars/all.yaml` are treated as constants.
 Do not default or assert them, e.g., `username`.

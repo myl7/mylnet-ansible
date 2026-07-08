@@ -32,6 +32,9 @@
       ansible.builtin.copy:
         src: nginx/nginx.conf
         dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: "0644"
       when: nginx_bin.stat.exists
       notify: Reload nginx
 

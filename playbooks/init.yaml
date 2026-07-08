@@ -140,6 +140,9 @@
       ansible.builtin.copy:
         src: nftables.conf
         dest: /etc/nftables.conf
+        owner: root
+        group: root
+        mode: "0644"
         validate: /usr/sbin/nft --check --file %s
       register: nftables_config
 
