@@ -125,6 +125,7 @@
           - "--auth-key={{ tailscale_auth_key }}"
           - "--hostname={{ tailscale_machine_name }}"
       register: tailscale_up
+      changed_when: true
       when:
         - tailscale_apt_source.stat.exists
         - not tailscale_logged_in
@@ -135,6 +136,7 @@
           - tailscale
           - set
           - "--hostname={{ tailscale_machine_name }}"
+      changed_when: true
       when:
         - tailscale_apt_source.stat.exists
         - tailscale_logged_in

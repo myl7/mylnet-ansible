@@ -10,3 +10,4 @@
   ansible.builtin.command:
     cmd: nginx -s reload
   become: true
+  changed_when: true

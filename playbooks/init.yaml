@@ -162,3 +162,4 @@
     - name: Reload nftables
       ansible.builtin.command:
         cmd: nft -f /etc/nftables.conf
+      changed_when: true
