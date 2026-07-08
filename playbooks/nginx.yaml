@@ -19,7 +19,7 @@
 
     - name: Copy TLS certs and keys
       ansible.builtin.copy:
-        src: ../secrets/tls/
+        src: secrets/tls/
         dest: /etc/nginx/tls/
         owner: root
         group: root

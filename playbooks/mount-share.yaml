@@ -3,7 +3,7 @@
   hosts: hosts
 
   vars_files:
-    - ../secrets.yaml
+    - secrets.yaml
 
   pre_tasks:
     - name: Check share_smb_host, share_smb_username, and share_smb_password

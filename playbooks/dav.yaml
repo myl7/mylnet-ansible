@@ -3,7 +3,7 @@
   hosts: sg
 
   vars_files:
-    - ../secrets.yaml
+    - secrets.yaml
 
   vars:
     dav_local_port: 50004
@@ -97,7 +97,7 @@
     - name: Write htpasswd
       become: true
       ansible.builtin.copy:
-        src: ../secrets/htpasswd/dav
+        src: secrets/htpasswd/dav
         dest: /etc/nginx/htpasswd/dav
         owner: root
         group: www-data

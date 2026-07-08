@@ -3,7 +3,7 @@
   hosts: proxy
 
   vars_files:
-    - ../secrets.yaml
+    - secrets.yaml
 
   vars:
     stack_dir: /opt/stacks/proxy
@@ -102,7 +102,7 @@
   become: true
 
   vars_files:
-    - ../secrets.yaml
+    - secrets.yaml
 
   vars:
     proxy_hostnames: "{{ groups.get('proxy', []) | sort }}"
