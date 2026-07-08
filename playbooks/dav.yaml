@@ -148,4 +148,4 @@
       when: dav_service.stat.exists
 
     - name: Import nginx handlers
-      ansible.builtin.import_tasks: handlers/nginx.yaml
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
