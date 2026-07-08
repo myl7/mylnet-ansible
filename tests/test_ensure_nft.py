@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "files" / "ensure_nft.py"
+MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "ensure_nft.py"
 spec = importlib.util.spec_from_file_location("ensure_nft", MODULE_PATH)
 assert spec is not None
 ensure_nft = importlib.util.module_from_spec(spec)
