@@ -35,6 +35,25 @@
       when: nginx_bin.stat.exists
       notify: Reload nginx
 
+    - name: Create nginx service drop-in dir
+      ansible.builtin.file:
+        path: /etc/systemd/system/nginx.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: nginx_bin.stat.exists
+
+    - name: Copy nginx service hardening drop-in
+      ansible.builtin.copy:
+        src: ../files/systemd-hardening.conf
+        dest: /etc/systemd/system/nginx.service.d/hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+      when: nginx_bin.stat.exists
+      notify: Restart nginx
+
     - name: Copy dhparam
       ansible.builtin.copy:
         src: ../files/nginx/dhparam
@@ -88,5 +107,21 @@
       when: nginx_bin.stat.exists
 
   handlers:
+    - name: Verify nginx service
+      become: true
+      ansible.builtin.command:
+        cmd: systemd-analyze verify nginx.service
+      changed_when: false
+      listen: Restart nginx
+      when: nginx_bin.stat.exists
+
+    - name: Restart nginx
+      become: true
+      ansible.builtin.systemd_service:
+        name: nginx
+        state: restarted
+        daemon_reload: true
+      when: nginx_bin.stat.exists
+
     - name: Import nginx handlers
       ansible.builtin.import_tasks: handlers/nginx.yaml

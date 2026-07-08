@@ -50,6 +50,25 @@
         mode: "0644"
       notify: Restart rclone dav
 
+    - name: Create rclone dav service drop-in dir
+      become: true
+      ansible.builtin.file:
+        path: /etc/systemd/system/rclone-dav.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy rclone dav service hardening drop-in
+      become: true
+      ansible.builtin.copy:
+        src: ../files/systemd-hardening.conf
+        dest: /etc/systemd/system/rclone-dav.service.d/hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart rclone dav
+
     - name: Check rclone dav service exists
       become: true
       ansible.builtin.stat:
@@ -112,6 +131,14 @@
       notify: Reload nginx
 
   handlers:
+    - name: Verify rclone dav service
+      become: true
+      ansible.builtin.command:
+        cmd: systemd-analyze verify rclone-dav.service
+      changed_when: false
+      listen: Restart rclone dav
+      when: dav_service.stat.exists
+
     - name: Restart rclone dav
       become: true
       ansible.builtin.systemd_service:
