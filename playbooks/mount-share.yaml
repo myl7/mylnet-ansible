@@ -65,5 +65,6 @@
 
     - name: Start share automount
       become: true
-      ansible.builtin.command:
-        cmd: systemctl start srv-share.automount
+      ansible.builtin.systemd_service:
+        name: srv-share.automount
+        state: started
