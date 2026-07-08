@@ -37,7 +37,7 @@
     - name: Upgrade packages
       ansible.builtin.apt:
         update_cache: true
-        upgrade: yes
+        upgrade: "yes"
 
     - name: Install basic packages
       ansible.builtin.apt:
