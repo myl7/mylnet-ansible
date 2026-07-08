@@ -90,4 +90,4 @@
         state: directory
         owner: root
         group: docker
-        mode: "0775"
+        mode: "0770"
