@@ -2,7 +2,8 @@ Prefer `restart: always` for disposable Docker containers.
 
 ## Ansible Preference
 
-Prefer simple `lookup('env/file', ...)` rather than `lookup('ansible.builtin.env/file', ...)`.
+Use plugin FQDNs in `lookup`, e.g., `lookup('ansible.builtin.env', ...)`.
+
 For `copy.src`, use paths relative to `files/`, e.g., `systemd/hardening.conf`.
 For `template.src`, use paths relative to `templates/`, e.g., `proxy/config.yaml.j2`.
 Do not use `../files/...`, `../templates/...`, or `playbook_dir` in `copy.src` and `template.src`.

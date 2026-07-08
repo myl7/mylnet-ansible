@@ -82,7 +82,7 @@ rules:
   - DOMAIN-SUFFIX,generativelanguage.googleapis.com,ai
   - DOMAIN-KEYWORD,openrouter,ai
 
-{{ lookup('file', '../secrets/clash_rules_extend.yaml').split('\n')[1:] | join('\n') }}
+{{ lookup('ansible.builtin.file', '../secrets/clash_rules_extend.yaml').split('\n')[1:] | join('\n') }}
 
   - GEOSITE,cn,cn
 

@@ -186,7 +186,7 @@
       ansible.posix.authorized_key:
         user: "{{ username }}"
         state: present
-        key: "{{ lookup('file', '../secrets/ssh/id_ed25519.pub') }}"
+        key: "{{ lookup('ansible.builtin.file', '../secrets/ssh/id_ed25519.pub') }}"
       when: ansible_facts.getent_passwd[username] is not none
 
     # lynis HOME-9304
