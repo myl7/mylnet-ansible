@@ -327,6 +327,12 @@
         group: root
         mode: "0755"
 
+    - name: Check auditd is installed
+      ansible.builtin.stat:
+        path: /usr/sbin/auditd
+      register: auditd_bin
+      changed_when: false
+
     # lynis ACCT-9628: Audit security-sensitive file changes
     - name: Install auditd watch rules
       ansible.builtin.copy:
@@ -342,6 +348,7 @@
         name: auditd
         enabled: true
         state: started
+      when: auditd_bin.stat.exists
 
     - name: Install auditd watch report script
       ansible.builtin.copy:
@@ -406,12 +413,19 @@
         day: "1"
         job: /usr/local/sbin/mylnet-pwck-report
 
+    - name: Check sysstat is installed
+      ansible.builtin.stat:
+        path: /etc/default/sysstat
+      register: sysstat_default
+      changed_when: false
+
     # lynis ACCT-9626
     - name: Enable sysstat collection
       ansible.builtin.lineinfile:
         path: /etc/default/sysstat
         regexp: "^ENABLED="
         line: 'ENABLED="true"'
+      when: sysstat_default.stat.exists
 
     # lynis ACCT-9626
     - name: Start and enable sysstat timers
@@ -422,6 +436,7 @@
       loop:
         - sysstat-collect.timer
         - sysstat-summary.timer
+      when: sysstat_default.stat.exists
 
     - name: Create journald drop-in directory
       ansible.builtin.file:
@@ -475,6 +490,7 @@
       ansible.builtin.command:
         cmd: augenrules --load
       changed_when: true
+      when: auditd_bin.stat.exists
 
     - name: Restart journald
       ansible.builtin.systemd_service:
