@@ -51,5 +51,3 @@ Do not use broad names and avoid "required".
 Put host-shared local config default and asssertion in `pre_tasks`.
 
 To assign a variable during tasks, because ansible variables are lazily evaluated, just put the assignment in `vars`.
-
-Do not add `name` for `ansible.builtin.import_tasks`.

@@ -88,4 +88,5 @@
       when: nginx_bin.stat.exists
 
   handlers:
-    - ansible.builtin.import_tasks: handlers/nginx.yaml
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: handlers/nginx.yaml

@@ -100,5 +100,8 @@
       notify: Reload nginx
 
   handlers:
-    - ansible.builtin.import_tasks: handlers/docker.yaml
-    - ansible.builtin.import_tasks: handlers/nginx.yaml
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: handlers/docker.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: handlers/nginx.yaml

@@ -120,4 +120,5 @@
         daemon_reload: true
       when: dav_service.stat.exists
 
-    - ansible.builtin.import_tasks: handlers/nginx.yaml
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: handlers/nginx.yaml
