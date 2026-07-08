@@ -13,6 +13,7 @@ server {
         types {}
         default_type text/yaml;
         add_header Cache-Control "no-store";
+        include snippets/headers.conf;
         try_files /clash.yaml =404;
     }
 
