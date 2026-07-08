@@ -44,7 +44,7 @@
       become: true
       ansible.builtin.script:
         cmd: >-
-          ../scripts/ensure_nft.py
+          {{ playbook_dir }}/../scripts/ensure_nft.py
           {{ (ansible_check_mode | default(false)) | ternary('--check', '') }}
           --
           {{ item }}

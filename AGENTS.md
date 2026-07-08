@@ -4,9 +4,12 @@ Prefer `restart: always` for disposable Docker containers.
 
 Use plugin FQDNs in `lookup`, e.g., `lookup('ansible.builtin.env', ...)`.
 
-For `copy.src`, use paths relative to `files/`, e.g., `systemd/hardening.conf`.
-For `template.src`, use paths relative to `templates/`, e.g., `proxy/config.yaml.j2`.
-Do not use `../files/...`, `../templates/...`, or `playbook_dir` in `copy.src` and `template.src`.
+When a module resolves its source against `files/` or `templates/`, such as `copy.src` and `template.src`, use the relative path Ansible documents, without a leading `../` or `./`.
+For `copy.src`, the path is relative to `files/`, e.g., `systemd/hardening.conf`.
+For `template.src`, the path is relative to `templates/`, e.g., `proxy/config.yaml.j2`.
+Do not use `../files/...`, `../templates/...`, or `playbook_dir` here.
+
+Everywhere else, prefer absolute paths, e.g., `{{ playbook_dir }}/../scripts/ensure_nft.py` in `script.cmd`.
 
 For long config files in `copy` tasks, prefer files or templates rather than inline `content`.
 
