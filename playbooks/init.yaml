@@ -138,7 +138,7 @@
 
     - name: Setup nftables
       ansible.builtin.copy:
-        src: ../files/nftables.conf
+        src: nftables.conf
         dest: /etc/nftables.conf
         validate: /usr/sbin/nft --check --file %s
       register: nftables_config
@@ -269,7 +269,7 @@
 
     - name: Configure msmtp
       ansible.builtin.template:
-        src: ../files/msmtp/msmtprc.j2
+        src: msmtp/msmtprc.j2
         dest: /etc/msmtprc
         owner: root
         group: root
@@ -329,7 +329,7 @@
     # lynis ACCT-9628: Audit security-sensitive file changes
     - name: Install auditd watch rules
       ansible.builtin.copy:
-        src: ../files/auditd/hardening.rules
+        src: auditd/hardening.rules
         dest: /etc/auditd/rules.d/99-mylnet-hardening.rules
         owner: root
         group: root
@@ -344,7 +344,7 @@
 
     - name: Install auditd watch report script
       ansible.builtin.copy:
-        src: ../files/security/auditd-watch-report
+        src: security/auditd-watch-report
         dest: /usr/local/sbin/mylnet-auditd-watch-report
         owner: root
         group: root
@@ -389,7 +389,7 @@
     # lynis AUTH-9228: Check passwd and shadow consistency
     - name: Install pwck report script
       ansible.builtin.copy:
-        src: ../files/security/pwck-report
+        src: security/pwck-report
         dest: /usr/local/sbin/mylnet-pwck-report
         owner: root
         group: root

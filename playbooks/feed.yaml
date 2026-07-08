@@ -52,7 +52,7 @@
 
     - name: Render compose file
       ansible.builtin.template:
-        src: ../files/miniflux/compose.yaml.j2
+        src: miniflux/compose.yaml.j2
         dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -76,7 +76,7 @@
     - name: Render nginx site
       become: true
       ansible.builtin.template:
-        src: ../files/miniflux/miniflux.nginx.j2
+        src: miniflux/miniflux.nginx.j2
         dest: /etc/nginx/sites-available/miniflux
         owner: root
         group: root

@@ -63,7 +63,7 @@
 
     - name: Render config
       ansible.builtin.template:
-        src: ../files/proxy/config.yaml.j2
+        src: proxy/config.yaml.j2
         dest: "{{ stack_dir }}/config.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -72,7 +72,7 @@
 
     - name: Copy compose file
       ansible.builtin.copy:
-        src: ../files/proxy/compose.yaml
+        src: proxy/compose.yaml
         dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -177,7 +177,7 @@
 
     - name: Render subscription content
       ansible.builtin.template:
-        src: ../files/proxy/clash.yaml.j2
+        src: proxy/clash.yaml.j2
         dest: /var/www/proxy-sub/clash.yaml
         owner: root
         group: root
@@ -185,7 +185,7 @@
 
     - name: Render subscription nginx site
       ansible.builtin.template:
-        src: ../files/proxy/proxy-sub.nginx.j2
+        src: proxy/proxy-sub.nginx.j2
         dest: /etc/nginx/sites-available/proxy-sub
         owner: root
         group: root

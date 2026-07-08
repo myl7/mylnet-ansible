@@ -43,7 +43,7 @@
     - name: Render rclone dav service
       become: true
       ansible.builtin.template:
-        src: ../files/dav/rclone-dav.service.j2
+        src: dav/rclone-dav.service.j2
         dest: /etc/systemd/system/rclone-dav.service
         owner: root
         group: root
@@ -62,7 +62,7 @@
     - name: Copy rclone dav service hardening drop-in
       become: true
       ansible.builtin.copy:
-        src: ../files/systemd-hardening.conf
+        src: systemd/hardening.conf
         dest: /etc/systemd/system/rclone-dav.service.d/hardening.conf
         owner: root
         group: root
@@ -107,7 +107,7 @@
     - name: Render nginx site
       become: true
       ansible.builtin.template:
-        src: ../files/dav/dav.nginx.j2
+        src: dav/dav.nginx.j2
         dest: /etc/nginx/sites-available/dav
         owner: root
         group: root

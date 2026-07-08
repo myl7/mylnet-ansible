@@ -36,7 +36,7 @@
 
     - name: Render compose file
       ansible.builtin.template:
-        src: ../files/uptime/compose.yaml.j2
+        src: uptime/compose.yaml.j2
         dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -60,7 +60,7 @@
     - name: Render nginx site
       become: true
       ansible.builtin.template:
-        src: ../files/uptime/uptime.nginx.j2
+        src: uptime/uptime.nginx.j2
         dest: /etc/nginx/sites-available/uptime
         owner: root
         group: root

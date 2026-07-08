@@ -46,7 +46,7 @@
 
     - name: Render compose file
       ansible.builtin.template:
-        src: ../files/gitea/compose.yaml.j2
+        src: gitea/compose.yaml.j2
         dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -70,7 +70,7 @@
     - name: Render nginx site
       become: true
       ansible.builtin.template:
-        src: ../files/gitea/gitea.nginx.j2
+        src: gitea/gitea.nginx.j2
         dest: /etc/nginx/sites-available/gitea
         owner: root
         group: root

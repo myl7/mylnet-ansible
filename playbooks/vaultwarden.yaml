@@ -46,7 +46,7 @@
 
     - name: Render compose file
       ansible.builtin.template:
-        src: ../files/vaultwarden/compose.yaml.j2
+        src: vaultwarden/compose.yaml.j2
         dest: "{{ stack_dir }}/compose.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -70,7 +70,7 @@
     - name: Render nginx site
       become: true
       ansible.builtin.template:
-        src: ../files/vaultwarden/vaultwarden.nginx.j2
+        src: vaultwarden/vaultwarden.nginx.j2
         dest: /etc/nginx/sites-available/vaultwarden
         owner: root
         group: root

@@ -30,7 +30,7 @@
 
     - name: Copy nginx.conf
       ansible.builtin.copy:
-        src: ../files/nginx/nginx.conf
+        src: nginx/nginx.conf
         dest: /etc/nginx/nginx.conf
       when: nginx_bin.stat.exists
       notify: Reload nginx
@@ -46,7 +46,7 @@
 
     - name: Copy nginx service hardening drop-in
       ansible.builtin.copy:
-        src: ../files/systemd-hardening.conf
+        src: systemd/hardening.conf
         dest: /etc/systemd/system/nginx.service.d/hardening.conf
         owner: root
         group: root
@@ -56,7 +56,7 @@
 
     - name: Copy dhparam
       ansible.builtin.copy:
-        src: ../files/nginx/dhparam
+        src: nginx/dhparam
         dest: /etc/nginx/dhparam
         owner: root
         group: root
@@ -66,7 +66,7 @@
 
     - name: Copy nginx snippets
       ansible.builtin.copy:
-        src: ../files/nginx/snippets/
+        src: nginx/snippets/
         dest: /etc/nginx/snippets/
         owner: root
         group: root
@@ -76,7 +76,7 @@
 
     - name: Copy ip site
       ansible.builtin.copy:
-        src: ../files/nginx/sites-available/ip
+        src: nginx/sites-available/ip
         dest: /etc/nginx/sites-available/ip
         owner: root
         group: root
