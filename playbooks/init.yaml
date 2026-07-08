@@ -23,7 +23,6 @@
           - password_hash is defined
         fail_msg: "Set password_hash in secrets.yaml"
         quiet: true
-      run_once: true
 
     - name: Check SMTP config
       ansible.builtin.assert:
@@ -36,7 +35,6 @@
           - system_smtp_to is defined
         fail_msg: "Set system_smtp_host, system_smtp_port, system_smtp_username, system_smtp_password, system_smtp_from, system_smtp_to in secrets.yaml"
         quiet: true
-      run_once: true
 
   tasks:
     - name: Bootstrap Python for Ansible

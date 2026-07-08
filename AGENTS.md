@@ -15,6 +15,8 @@ Secrets can appear in them.
 
 Never use `ansible_check_mode` in `when` checks of tasks.
 
+Do not use `run_once: true`.
+
 Avoid implicit file creation.
 If the module supports `create` and the target file is expected to exist, set `create: false`.
 Otherwise, e,g, for `copy` and `template`, which do not have `create`, set `owner`, `group`, and `mode`.

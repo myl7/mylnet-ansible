@@ -128,7 +128,6 @@
           - proxy_proxy_hostname in proxy_hostnames
         fail_msg: "Set proxy_ai_hostname and proxy_proxy_hostname to hosts in the proxy group"
         quiet: true
-      run_once: true
 
     - name: Check proxy_sub_domain, proxy_sub_cert, and proxy_sub_key
       ansible.builtin.assert:
@@ -138,7 +137,6 @@
           - proxy_sub_key is defined
         fail_msg: "Set proxy_sub_domain, proxy_sub_cert and proxy_sub_key"
         quiet: true
-      run_once: true
 
     - name: Check proxy_sub_id
       ansible.builtin.assert:
@@ -146,7 +144,6 @@
           - proxy_sub_id is defined
         fail_msg: "Set proxy_sub_id in secrets.yaml"
         quiet: true
-      run_once: true
 
     - name: Check ansible_host for each proxy host
       ansible.builtin.assert:
@@ -154,7 +151,6 @@
           - hostvars[item].ansible_host | default('') | string | trim | length > 0
         fail_msg: "Set ansible_host for proxy host {{ item }}"
         quiet: true
-      run_once: true
       loop: "{{ proxy_hostnames }}"
 
     - name: Check proxy_ss_passwords for each proxy host
@@ -163,7 +159,6 @@
           - proxy_ss_passwords[item] is defined
         fail_msg: 'Set proxy_ss_passwords["{{ item }}"] in secrets.yaml'
         quiet: true
-      run_once: true
       loop: "{{ proxy_hostnames }}"
 
   tasks:
