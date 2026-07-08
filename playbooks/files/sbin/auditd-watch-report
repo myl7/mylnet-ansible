@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+
+state_dir=/var/lib/mylnet-security
+checkpoint="$state_dir/auditd-watch.checkpoint"
+
+mkdir -p "$state_dir"
+
+run_ausearch() {
+  ausearch --input-logs --checkpoint "$checkpoint" "$@" -k mylnet-hardening -i 2>&1
+}
+
+status=0
+output=$(run_ausearch) || status=$?
+
+# 10/11/12: checkpoint is stale (log rotated); restart from the checkpoint.
+if [ "$status" -ge 10 ] && [ "$status" -le 12 ]; then
+  status=0
+  output=$(run_ausearch --start checkpoint) || status=$?
+fi
+
+# 1: no matching events, nothing to report.
+if [ "$status" -eq 1 ]; then
+  exit 0
+fi
+
+host=$(hostname -f 2>/dev/null || hostname)
+
+if [ "$status" -ne 0 ]; then
+  echo "auditd watched-file report failed on $host"
+  echo
+  printf '%s\n' "$output"
+  exit 0
+fi
+
+if [ -n "$output" ]; then
+  echo "auditd watched-file events on $host"
+  echo
+  printf '%s\n' "$output"
+fi

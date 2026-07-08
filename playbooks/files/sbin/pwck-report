@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+
+status=0
+raw=$(pwck -r 2>&1) || status=$?
+
+# Drop benign lines: missing home directories and the "no changes" note.
+filtered=$(printf '%s\n' "$raw" | grep -Ev "^user '[^']+': directory '[^']+' does not exist$|^pwck: no changes$") || true
+
+# Any UID 0 account other than root is unexpected.
+uid0=$(getent passwd | awk -F: '$3 == 0 && $1 != "root"')
+
+if [ -n "$filtered" ] || [ -n "$uid0" ]; then
+  host=$(hostname -f 2>/dev/null || hostname)
+  echo "passwd/shadow health check warning on $host"
+  echo
+  echo "pwck exit status: $status"
+  echo
+
+  if [ -n "$filtered" ]; then
+    echo "Unexpected pwck output:"
+    printf '%s\n' "$filtered"
+    echo
+  fi
+
+  if [ -n "$uid0" ]; then
+    echo "Unexpected UID 0 accounts:"
+    printf '%s\n' "$uid0"
+  fi
+fi
