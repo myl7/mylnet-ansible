@@ -111,14 +111,20 @@
         validate: /usr/sbin/sshd -t -f %s
       register: ssh_config
 
-    - name: Comment default SSH port
-      ansible.builtin.lineinfile:
+    - name: Comment old SSH config
+      ansible.builtin.replace:
         path: /etc/ssh/sshd_config
-        regexp: '^\s*(Port 22.*)$'
-        line: '# \1'
-        backrefs: true
+        after: "# END ANSIBLE MANAGED BLOCK"
+        regexp: '^(\s*{{ item }}[ \t=].*)$'
+        replace: '# \1'
         validate: /usr/sbin/sshd -t -f %s
-      register: ssh_comment_default_port
+      loop:
+        - PermitRootLogin
+        - PasswordAuthentication
+        - KbdInteractiveAuthentication
+        - Port
+        - UseDNS
+      register: ssh_comment_old_config
 
     - name: Start and enable nftables
       ansible.builtin.systemd_service:
@@ -420,12 +426,21 @@
         group: root
         mode: "0644"
 
+    - name: Whitelist known-good rkhunter findings
+      ansible.builtin.copy:
+        # /etc/.updated: systemd writes it after a successful system update
+        content: |
+          ALLOWHIDDENFILE=/etc/.updated
+        dest: /etc/rkhunter.conf.local
+        owner: root
+        group: root
+        mode: "0644"
+
     - name: Initialize rkhunter property database
-      ansible.builtin.shell: |
-        rkhunter --propupd
-        touch /var/lib/mylnet-security/rkhunter-propupd.done
+      ansible.builtin.command:
+        cmd: rkhunter --propupd
       args:
-        creates: /var/lib/mylnet-security/rkhunter-propupd.done
+        creates: /var/lib/rkhunter/db/rkhunter.dat
 
     # lynis AUTH-9228: Check passwd and shadow consistency
     - name: Install pwck report script
@@ -499,7 +514,7 @@
         msg: "SSH or nftables changed. Run the side-effect play with `--tags side_effect` after checking access so you do not lock yourself out of the server."
       when: >-
         ssh_config.changed
-        or ssh_comment_default_port.changed
+        or ssh_comment_old_config.changed
         or nftables_config.changed
 
     - name: Show nftables service rules notice
