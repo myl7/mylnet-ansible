@@ -1,0 +1,20 @@
+services:
+  rustfs:
+    image: rustfs/rustfs
+    restart: always
+    environment:
+      - RUSTFS_VOLUMES=/data
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ADDRESS=0.0.0.0:9001
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_ACCESS_KEY={{ rustfs_access_key | replace('$', '$$') }}
+      - RUSTFS_SECRET_KEY={{ rustfs_secret_key | replace('$', '$$') }}
+      - RUSTFS_OBS_LOGGER_LEVEL=info
+      - RUSTFS_OBS_LOG_DIRECTORY=
+    volumes:
+      - /srv/share/s3:/data
+    ports:
+      - "127.0.0.1:{{ rustfs_api_local_port }}:9000"
+      - "127.0.0.1:{{ rustfs_console_local_port }}:9001"
+    logging:
+      driver: local

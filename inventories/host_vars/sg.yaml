@@ -17,3 +17,9 @@ dav_key: /etc/nginx/tls/cloudflare/myl.moe.key
 uptime_domain: uptime.myl.moe
 uptime_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 uptime_key: /etc/nginx/tls/cloudflare/myl.moe.key
+s3_domain: s3.myl.moe
+s3_console_domain: s3-console.myl.moe
+s3_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+s3_key: /etc/nginx/tls/cloudflare/myl.moe.key
+s3_console_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+s3_console_key: /etc/nginx/tls/cloudflare/myl.moe.key
