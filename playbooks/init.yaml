@@ -257,7 +257,14 @@
         group: root
         mode: "0644"
 
-    # lynis PKGS-7420
+    - name: Unmask apt-daily services
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        masked: false
+      loop:
+        - apt-daily.service
+        - apt-daily-upgrade.service
+
     - name: Unmask and enable apt-daily timers
       ansible.builtin.systemd_service:
         name: "{{ item }}"
@@ -333,22 +340,45 @@
       register: auditd_bin
       changed_when: false
 
+    # Some VPS kernels ship without CONFIG_AUDIT, so auditctl and augenrules
+    # cannot reach the netlink audit socket. Skip the auditd subsystem there.
+    - name: Probe kernel audit support
+      ansible.builtin.command:
+        cmd: auditctl -s
+      register: audit_probe
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: auditd_bin.stat.exists
+
+    - name: Set audit support fact
+      ansible.builtin.set_fact:
+        audit_supported: "{{ auditd_bin.stat.exists and (audit_probe.rc | default(1)) == 0 }}"
+
     # lynis ACCT-9628: Audit security-sensitive file changes
     - name: Install auditd watch rules
       ansible.builtin.copy:
         src: auditd/hardening.rules
-        dest: /etc/auditd/rules.d/99-mylnet-hardening.rules
+        dest: /etc/audit/rules.d/99-mylnet-hardening.rules
         owner: root
         group: root
         mode: "0640"
       notify: Load auditd rules
+      when: audit_supported
 
     - name: Start and enable auditd
       ansible.builtin.systemd_service:
         name: auditd
         enabled: true
         state: started
-      when: auditd_bin.stat.exists
+      when: audit_supported
+
+    - name: Disable auditd without kernel audit support
+      ansible.builtin.systemd_service:
+        name: auditd
+        enabled: false
+        state: stopped
+      when: auditd_bin.stat.exists and not audit_supported
 
     - name: Install auditd watch report script
       ansible.builtin.copy:
@@ -357,11 +387,13 @@
         owner: root
         group: root
         mode: "0755"
+      when: audit_supported
 
     - name: Prime auditd watch report checkpoint
       ansible.builtin.command:
         cmd: /usr/local/sbin/mylnet-auditd-watch-report
       changed_when: false
+      when: audit_supported
 
     - name: Schedule auditd watch reports
       ansible.builtin.cron:
@@ -370,6 +402,7 @@
         user: root
         minute: "*/15"
         job: /usr/local/sbin/mylnet-auditd-watch-report
+      when: audit_supported
 
     # lynis HRDN-7230: Scan for rootkits and suspicious files
     - name: Configure rkhunter cron
@@ -490,7 +523,7 @@
       ansible.builtin.command:
         cmd: augenrules --load
       changed_when: true
-      when: auditd_bin.stat.exists
+      when: audit_supported
 
     - name: Restart journald
       ansible.builtin.systemd_service:
