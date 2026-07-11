@@ -9,6 +9,10 @@ StartLimitIntervalSec=0
 Type=simple
 User={{ username }}
 Group={{ username }}
+# rclone serves a local path here and needs no config file. Point it at an
+# empty one so it never probes $HOME, which ProtectHome=yes makes unreadable
+# and would otherwise turn into a fatal EACCES. Config-free via env, like rustfs.
+Environment=RCLONE_CONFIG=/dev/null
 ExecStart=/usr/bin/rclone serve webdav /srv/share/dav \
     --addr 127.0.0.1:{{ dav_local_port }} \
     --vfs-cache-mode writes \

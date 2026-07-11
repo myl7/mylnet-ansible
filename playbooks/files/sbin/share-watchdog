@@ -1,0 +1,24 @@
+#!/bin/bash
+# Revive the /srv/share CIFS automount when a backend outage killed it.
+#
+# The automount unit dies with 'mount-start-limit-hit' when consumers refire
+# mount.cifs past the mount unit's start rate limit while the SMB host is down.
+# A failed automount no longer arms /srv/share, so the share cannot self-heal
+# even after the host returns. This watchdog re-arms it and nudges a remount.
+set -uo pipefail
+
+mount_unit=srv-share.mount
+automount_unit=srv-share.automount
+share=/srv/share
+
+# Re-arm when the automount is not active, or when the mount is stuck failed
+# (start-limit-hit). reset-failed on a healthy unit is a harmless no-op.
+if [ "$(systemctl is-active "$automount_unit")" != "active" ] || systemctl is-failed --quiet "$mount_unit"; then
+  systemctl reset-failed "$mount_unit" "$automount_unit" 2>/dev/null || true
+  systemctl start "$automount_unit" || true
+fi
+
+# Poke the mountpoint so the armed automount establishes the mount when the host
+# is reachable. A soft CIFS mount fails fast while it is down; the timeout only
+# guards the pathological case where the call blocks.
+timeout 20 ls -1 "$share" >/dev/null 2>&1 || true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically revive the /srv/share CIFS automount
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

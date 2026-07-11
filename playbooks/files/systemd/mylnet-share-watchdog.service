@@ -1,0 +1,6 @@
+[Unit]
+Description=Revive the /srv/share CIFS automount if it was killed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mylnet-share-watchdog
