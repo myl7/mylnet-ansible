@@ -9,3 +9,22 @@
       ansible.builtin.apt:
         update_cache: true
         upgrade: "yes"
+
+    - name: Get installed Linux version
+      ansible.builtin.command:
+        cmd: readlink -f /vmlinuz
+      register: installed_linux
+      changed_when: false
+
+    - name: Get running Linux version
+      ansible.builtin.command:
+        cmd: uname -r
+      register: running_linux
+      changed_when: false
+
+    - name: Show reboot notice
+      ansible.builtin.debug:
+        msg: "Reboot the host because the installed Linux version differs from the running Linux version."
+      when: >-
+        installed_linux.stdout | basename | regex_replace('^vmlinuz-', '')
+        != running_linux.stdout
