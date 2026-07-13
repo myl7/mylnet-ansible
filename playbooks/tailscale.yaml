@@ -14,14 +14,17 @@
       - Ubuntu
     tailscale_apt_repo_url: "https://pkgs.tailscale.com/stable/{{ ansible_facts.distribution | lower }}/{{ ansible_facts.distribution_release }}"
     tailscale_auth_key: "{{ tailscale_auth_keys.get(inventory_hostname, '') }}"
-    tailscale_machine_name: "{{ tailscale_machine_names.get(inventory_hostname, inventory_hostname_short) | default(inventory_hostname_short, true) }}"
 
   pre_tasks:
-    - name: Default Tailscale maps
+    - name: Default tailscale_auth_keys
       ansible.builtin.set_fact:
-        tailscale_auth_keys: "{{ tailscale_auth_keys if tailscale_auth_keys is defined else {} }}"
-        tailscale_machine_names: "{{ tailscale_machine_names if tailscale_machine_names is defined else {} }}"
-      when: tailscale_auth_keys is undefined or tailscale_machine_names is undefined
+        tailscale_auth_keys: {}
+      when: tailscale_auth_keys is undefined
+
+    - name: Default tailscale_machine_name
+      ansible.builtin.set_fact:
+        tailscale_machine_name: "{{ inventory_hostname_short }}"
+      when: tailscale_machine_name is undefined
 
   tasks:
     - name: Check supported Tailscale apt source distribution

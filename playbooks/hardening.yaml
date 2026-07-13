@@ -13,6 +13,11 @@
     - secrets.yaml
 
   pre_tasks:
+    - name: Default rkhunter whitelist
+      ansible.builtin.set_fact:
+        rkhunter_allowed_hidden_files: []
+      when: rkhunter_allowed_hidden_files is undefined
+
     - name: Check SMTP config
       ansible.builtin.assert:
         that:
@@ -278,10 +283,11 @@
     - name: Whitelist known-good rkhunter findings
       ansible.builtin.copy:
         # /etc/.updated: systemd writes it after a successful system update
-        # /etc/.setip_config_hash: the VPS provider's setip.sh stores a config hash to skip reruns
         content: |
           ALLOWHIDDENFILE=/etc/.updated
-          ALLOWHIDDENFILE=/etc/.setip_config_hash
+          {% for path in rkhunter_allowed_hidden_files %}
+          ALLOWHIDDENFILE={{ path }}
+          {% endfor %}
         dest: /etc/rkhunter.conf.local
         owner: root
         group: root

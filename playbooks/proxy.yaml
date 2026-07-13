@@ -112,8 +112,6 @@
           proxy_hostnames | map('extract', hostvars, 'ansible_host')
         ))
       }}
-    proxy_ai_hostname: sg
-    proxy_proxy_hostname: sg
 
   pre_tasks:
     - name: Default proxy_ss_passwords
@@ -124,9 +122,11 @@
     - name: Check proxy_ai_hostname and proxy_proxy_hostname
       ansible.builtin.assert:
         that:
+          - proxy_ai_hostname is defined
+          - proxy_proxy_hostname is defined
           - proxy_ai_hostname in proxy_hostnames
           - proxy_proxy_hostname in proxy_hostnames
-        fail_msg: "Set proxy_ai_hostname and proxy_proxy_hostname to hosts in the proxy group"
+        fail_msg: "Set proxy_ai_hostname and proxy_proxy_hostname in inventories/group_vars/proxy.yaml to hosts in the proxy group"
         quiet: true
 
     - name: Check proxy_sub_domain, proxy_sub_cert, and proxy_sub_key
