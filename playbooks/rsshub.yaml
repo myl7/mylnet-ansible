@@ -1,0 +1,101 @@
+---
+- name: Deploy RSSHub
+  hosts: sg
+
+  vars_files:
+    - secrets.yaml
+
+  vars:
+    rsshub_local_port: 50008
+    stack_dir: /opt/stacks/rsshub
+
+  pre_tasks:
+    - name: Check rsshub_domain, rsshub_cert, and rsshub_key
+      ansible.builtin.assert:
+        that:
+          - rsshub_domain is defined
+          - rsshub_cert is defined
+          - rsshub_key is defined
+        fail_msg: "Set rsshub_domain, rsshub_cert and rsshub_key"
+        quiet: true
+
+    - name: Check rsshub_access_key
+      ansible.builtin.assert:
+        that:
+          - rsshub_access_key is defined
+        fail_msg: "Set rsshub_access_key in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create redis dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/rsshub/redis
+        state: directory
+        owner: 999
+        group: root
+        mode: "0755" # redis entrypoint chowns /data to the redis user
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: rsshub/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+      when: stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: rsshub/rsshub.nginx.j2
+        dest: /etc/nginx/sites-available/rsshub
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/rsshub
+      register: rsshub_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/rsshub
+        dest: /etc/nginx/sites-enabled/rsshub
+        state: link
+      when: rsshub_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
