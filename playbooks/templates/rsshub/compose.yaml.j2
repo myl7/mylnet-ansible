@@ -2,6 +2,7 @@ services:
   rsshub:
     image: diygod/rsshub
     restart: always
+    command: /usr/local/bin/rsshub-start
     depends_on:
       redis:
         condition: service_healthy
@@ -15,6 +16,8 @@ services:
       - ACCESS_KEY={{ rsshub_access_key | replace('$', '$$') }}
     ports:
       - "127.0.0.1:{{ rsshub_local_port }}:1200"
+    volumes:
+      - ./start.sh:/usr/local/bin/rsshub-start:ro
     healthcheck:
       test: ["CMD-SHELL", 'curl -f "http://localhost:1200/healthz?key=$${ACCESS_KEY}"']
       interval: 30s

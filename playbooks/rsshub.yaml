@@ -44,6 +44,15 @@
         group: root
         mode: "0755" # redis entrypoint chowns /data to the redis user
 
+    - name: Copy RSSHub start script
+      ansible.builtin.copy:
+        src: rsshub/start.sh
+        dest: "{{ stack_dir }}/start.sh"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+      notify: Recreate containers
+
     - name: Render compose file
       ansible.builtin.template:
         src: rsshub/compose.yaml.j2
