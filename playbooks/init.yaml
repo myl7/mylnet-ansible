@@ -58,6 +58,7 @@
           - rsync
           - ca-certificates
           - cron
+          - tmux
           - python3-debian # For deb822_repository module
         state: present
 
