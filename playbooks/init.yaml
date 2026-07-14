@@ -82,6 +82,10 @@
           KbdInteractiveAuthentication no
           Port 50000
           UseDNS no
+          # lynis SSH-7408
+          X11Forwarding no
+          AllowAgentForwarding no
+          LogLevel VERBOSE
         validate: /usr/sbin/sshd -t -f %s
       register: ssh_config
 
@@ -98,6 +102,9 @@
         - KbdInteractiveAuthentication
         - Port
         - UseDNS
+        - X11Forwarding
+        - AllowAgentForwarding
+        - LogLevel
       register: ssh_comment_old_config
 
     - name: Start and enable nftables
