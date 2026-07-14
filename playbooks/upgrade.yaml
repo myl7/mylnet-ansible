@@ -28,3 +28,27 @@
       when: >-
         installed_linux.stdout | basename | regex_replace('^vmlinuz-', '')
         != running_linux.stdout
+
+    - name: Find containers running deleted shim binaries
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          command -v docker >/dev/null || exit 0
+          for pid in $(pgrep -f containerd-shim); do
+            case "$(readlink "/proc/${pid}/exe")" in
+            *" (deleted)")
+              id=$(tr '\0' '\n' < "/proc/${pid}/cmdline" | grep -A1 -x -- -id | tail -n1)
+              docker ps --no-trunc --filter "id=${id}" --format '{% raw %}{{.Names}}{% endraw %}'
+              ;;
+            esac
+          done
+        executable: /bin/bash
+      register: stale_shim_containers
+      changed_when: false
+
+    - name: Show container restart notice
+      ansible.builtin.debug:
+        msg: >-
+          Restart these containers because their shims still run a deleted
+          containerd binary: {{ stale_shim_containers.stdout_lines | join(', ') }}
+      when: stale_shim_containers.stdout_lines | length > 0
