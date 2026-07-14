@@ -1,0 +1,86 @@
+---
+- name: Deploy gost relay
+  hosts: sg
+
+  vars_files:
+    - secrets.yaml
+
+  vars:
+    gost_local_port: 50009
+    stack_dir: /opt/stacks/gost
+
+  pre_tasks:
+    - name: Check gost_username, gost_password, and gost_path
+      ansible.builtin.assert:
+        that:
+          - gost_username is defined
+          - gost_password is defined
+          - gost_path is defined
+        fail_msg: "Set gost_username, gost_password and gost_path in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render gost config
+      ansible.builtin.template:
+        src: gost/gost.yaml.j2
+        dest: "{{ stack_dir }}/gost.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0600"
+      notify: Recreate containers
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: gost/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+      when: stack_dir_stat.stat.exists
+
+    - name: Render gost nginx site
+      become: true
+      ansible.builtin.template:
+        src: gost/gost.nginx.j2
+        dest: /etc/nginx/sites-available/gost
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable gost nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/gost
+        dest: /etc/nginx/sites-enabled/gost
+        state: link
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml

@@ -1,0 +1,12 @@
+services:
+  - name: relay
+    addr: ":{{ gost_local_port }}"
+    handler:
+      type: relay
+      auth:
+        username: {{ gost_username | to_json }}
+        password: {{ gost_password | to_json }}
+    listener:
+      type: ws
+      metadata:
+        path: {{ ('/' ~ gost_path) | to_json }}

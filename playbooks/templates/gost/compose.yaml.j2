@@ -1,0 +1,13 @@
+services:
+  gost:
+    image: gogost/gost
+    restart: always
+    command:
+      - -C
+      - /etc/gost/gost.yaml
+    volumes:
+      - ./gost.yaml:/etc/gost/gost.yaml:ro
+    ports:
+      - "127.0.0.1:{{ gost_local_port }}:{{ gost_local_port }}"
+    logging:
+      driver: local
