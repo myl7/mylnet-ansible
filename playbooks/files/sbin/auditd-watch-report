@@ -7,7 +7,7 @@ checkpoint="$state_dir/auditd-watch.checkpoint"
 mkdir -p "$state_dir"
 
 run_ausearch() {
-  ausearch --input-logs --checkpoint "$checkpoint" "$@" -k mylnet-hardening -i 2>&1
+  /usr/sbin/ausearch --input-logs --checkpoint "$checkpoint" "$@" -k mylnet-hardening -i 2>&1
 }
 
 status=0
