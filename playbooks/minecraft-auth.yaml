@@ -1,0 +1,118 @@
+---
+- name: Deploy minecraft auth server
+  hosts: sg
+
+  vars_files:
+    - secrets.yaml
+
+  vars:
+    mc_auth_local_port: 50010
+    stack_dir: /opt/stacks/minecraft-auth
+
+  pre_tasks:
+    - name: Check mc_auth_domain, mc_auth_cert, and mc_auth_key
+      ansible.builtin.assert:
+        that:
+          - mc_auth_domain is defined
+          - mc_auth_cert is defined
+          - mc_auth_key is defined
+        fail_msg: "Set mc_auth_domain, mc_auth_cert and mc_auth_key"
+        quiet: true
+
+    - name: Check mc_auth_admin_username
+      ansible.builtin.assert:
+        that:
+          - mc_auth_admin_username is defined
+        fail_msg: "Set mc_auth_admin_username in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create config dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/config"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create data dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/minecraft-auth/data
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render Drasl config
+      ansible.builtin.template:
+        src: minecraft-auth/config.toml.j2
+        dest: "{{ stack_dir }}/config/config.toml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: minecraft-auth/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+      when: stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: minecraft-auth/minecraft-auth.nginx.j2
+        dest: /etc/nginx/sites-available/minecraft-auth
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/minecraft-auth
+      register: minecraft_auth_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/minecraft-auth
+        dest: /etc/nginx/sites-enabled/minecraft-auth
+        state: link
+      when: minecraft_auth_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml

@@ -32,3 +32,6 @@ s3_console_key: /etc/nginx/tls/cloudflare/myl.moe.key
 gost_domain: tun.myl.moe
 gost_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 gost_key: /etc/nginx/tls/cloudflare/myl.moe.key
+mc_auth_domain: mcauth.myl.moe
+mc_auth_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+mc_auth_key: /etc/nginx/tls/cloudflare/myl.moe.key

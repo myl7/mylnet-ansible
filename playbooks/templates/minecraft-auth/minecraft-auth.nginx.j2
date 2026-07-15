@@ -1,0 +1,15 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ mc_auth_domain }};
+
+    ssl_certificate {{ mc_auth_cert }};
+    ssl_certificate_key {{ mc_auth_key }};
+
+    client_max_body_size 10m; # skin/cape uploads
+
+    location / {
+        proxy_pass http://127.0.0.1:{{ mc_auth_local_port }};
+        include snippets/rproxy.conf;
+    }
+}

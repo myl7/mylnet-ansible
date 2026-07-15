@@ -1,0 +1,11 @@
+services:
+  drasl:
+    image: unmojang/drasl
+    restart: always
+    volumes:
+      - ./config:/etc/drasl
+      - /srv/minecraft-auth/data:/var/lib/drasl
+    ports:
+      - "127.0.0.1:{{ mc_auth_local_port }}:25585"
+    logging:
+      driver: local
