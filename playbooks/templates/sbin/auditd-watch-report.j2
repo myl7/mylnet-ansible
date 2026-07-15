@@ -1,0 +1,90 @@
+#!/bin/bash
+set -euo pipefail
+
+state_dir=/var/lib/mylnet-security
+checkpoint_main="$state_dir/auditd-watch.checkpoint"
+checkpoint_login="$state_dir/auditd-watch-login.checkpoint"
+fail_state="$state_dir/auditd-watch-fail.state"
+trusted_user="{{ username }}"
+max_fail_mails_per_day=3
+
+mkdir -p "$state_dir"
+
+host=$(hostname -f 2>/dev/null || hostname)
+event_report=""
+failure_report=""
+
+run_ausearch() {
+  local checkpoint="$1" key="$2"
+  shift 2
+  /usr/sbin/ausearch --input-logs --checkpoint "$checkpoint" -k "$key" "$@" -i 2>&1
+}
+
+# Drop /var/log/lastlog events whose login uid (auid, fixed at login and
+# unaffected by sudo/su) is the trusted account, since that account's own
+# logins are expected noise, not a signal worth mailing about.
+drop_trusted_login() {
+  awk -v RS='' -v ORS='\n\n' -v user="$trusted_user" '
+    $0 !~ ("(^|[[:space:]])auid=" user "([[:space:]]|$)") { print }
+  '
+}
+
+# $1: checkpoint file, $2: audit key, $3: label for report headers,
+# $4: optional filter function applied to the raw ausearch output.
+check_key() {
+  local checkpoint="$1" key="$2" label="$3" filter="${4:-cat}"
+  local status=0
+  local output
+  output=$(run_ausearch "$checkpoint" "$key") || status=$?
+
+  # 10/11/12: checkpoint is stale (log rotated); restart from the checkpoint.
+  if [ "$status" -ge 10 ] && [ "$status" -le 12 ]; then
+    status=0
+    output=$(run_ausearch "$checkpoint" "$key" --start checkpoint) || status=$?
+  fi
+
+  if [ "$status" -eq 1 ]; then
+    return 0
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    failure_report+="$label report failed on $host
+
+$output
+
+"
+    return 0
+  fi
+
+  local filtered
+  filtered=$(printf '%s\n' "$output" | "$filter")
+  if [ -n "$filtered" ]; then
+    event_report+="$label on $host
+
+$filtered
+
+"
+  fi
+}
+
+check_key "$checkpoint_main" mylnet-hardening "Watched security file events"
+check_key "$checkpoint_login" mylnet-hardening-login "Unexpected lastlog writes (not from $trusted_user)" drop_trusted_login
+
+if [ -n "$failure_report" ]; then
+  today=$(date +%F)
+  fail_count=0
+  if [ -f "$fail_state" ]; then
+    read -r fail_date fail_count < "$fail_state" || true
+    if [ "$fail_date" != "$today" ]; then
+      fail_count=0
+    fi
+  fi
+
+  if [ "$fail_count" -lt "$max_fail_mails_per_day" ]; then
+    echo "$today $((fail_count + 1))" > "$fail_state"
+  else
+    failure_report=""
+  fi
+fi
+
+printf '%s%s' "$event_report" "$failure_report"

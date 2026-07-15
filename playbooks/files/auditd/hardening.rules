@@ -3,4 +3,4 @@
 -w /etc/sudoers -p wa -k mylnet-hardening
 -w /etc/sudoers.d/ -p wa -k mylnet-hardening
 -w /etc/ssh/sshd_config -p wa -k mylnet-hardening
--w /var/log/lastlog -p wa -k mylnet-hardening
+-w /var/log/lastlog -p wa -k mylnet-hardening-login

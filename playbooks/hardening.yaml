@@ -241,8 +241,8 @@
       when: auditd_bin.stat.exists and not audit_supported
 
     - name: Install auditd watch report script
-      ansible.builtin.copy:
-        src: sbin/auditd-watch-report
+      ansible.builtin.template:
+        src: sbin/auditd-watch-report.j2
         dest: /usr/local/sbin/mylnet-auditd-watch-report
         owner: root
         group: root
