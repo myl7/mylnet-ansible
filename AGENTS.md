@@ -1,12 +1,6 @@
-## Production Safety
-
-This repository manages production hosts.
-Never deploy without explicit user approval in the current message: no `ansible-playbook` against real hosts, no state-changing commands over SSH, no service restarts on managed nodes.
-Approval for one action does not extend to later actions.
-
 Prefer `restart: always` for disposable Docker containers.
 
-## Ansible Preference
+# Ansible Preference
 
 Use plugin FQDNs in `lookup`, e.g., `lookup('ansible.builtin.env', ...)`.
 
