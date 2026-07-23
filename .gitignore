@@ -11,10 +11,6 @@
 # Ansible
 .ansible
 
-# Credentials
-secrets
-secrets.yaml
-
 # Python
 __pycache__
 .ruff_cache

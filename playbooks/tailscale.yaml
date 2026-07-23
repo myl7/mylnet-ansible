@@ -6,7 +6,7 @@
   become: true
 
   vars_files:
-    - secrets.yaml
+    - secrets/secrets.yaml
 
   vars:
     tailscale_distros:

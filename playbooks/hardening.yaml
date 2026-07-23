@@ -10,7 +10,7 @@
       - netfilter-persistent.service # Redundant with nftables
 
   vars_files:
-    - secrets.yaml
+    - secrets/secrets.yaml
 
   pre_tasks:
     - name: Default rkhunter whitelist

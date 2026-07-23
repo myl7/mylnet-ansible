@@ -3,7 +3,7 @@
   hosts: sg
 
   vars_files:
-    - secrets.yaml
+    - secrets/secrets.yaml
 
   vars:
     mc_auth_local_port: 50010
