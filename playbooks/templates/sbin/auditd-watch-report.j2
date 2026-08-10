@@ -43,11 +43,13 @@ drop_events() {
 }
 
 # Loading the rules emits one add_rule CONFIG_CHANGE per rule, carrying that
-# rule's key, so every boot and every augenrules reload lands in the report.
-# auid=unset means the load came from auditd startup rather than a login
-# session, which makes it expected noise.
+# rule's key, so every boot and every playbook run lands in the report. The
+# auid varies with the trigger: unset for auditd startup, the invoking account
+# for an augenrules reload. Installing a watch hides nothing, and a watch going
+# away still shows up as remove_rule, so a successful add is noise no matter
+# who made it. A failed add stays in the report as an operational problem.
 drop_rule_load() {
-  drop_events 'auid=unset .*op=add_rule'
+  drop_events 'op=add_rule .*res=yes'
 }
 
 # Drop /var/log/lastlog events whose login uid (auid, fixed at login and
