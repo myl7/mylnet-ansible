@@ -20,17 +20,46 @@ run_ausearch() {
   /usr/sbin/ausearch --input-logs --checkpoint "$checkpoint" -k "$key" "$@" -i 2>&1
 }
 
+# Drop whole events that have a line matching $1. ausearch separates events
+# with a "----" line and leaves no blank line inside an event, so records have
+# to be split on that separator.
+drop_events() {
+  awk -v pattern="$1" '
+    function flush(  i) {
+      if (n > 0 && !skip) {
+        print "----"
+        for (i = 1; i <= n; i++) {
+          print buf[i]
+        }
+      }
+      n = 0
+      skip = 0
+    }
+    /^----$/ { flush(); next }
+    $0 ~ pattern { skip = 1 }
+    { buf[++n] = $0 }
+    END { flush() }
+  '
+}
+
+# Loading the rules emits one add_rule CONFIG_CHANGE per rule, carrying that
+# rule's key, so every boot and every augenrules reload lands in the report.
+# auid=unset means the load came from auditd startup rather than a login
+# session, which makes it expected noise.
+drop_rule_load() {
+  drop_events 'auid=unset .*op=add_rule'
+}
+
 # Drop /var/log/lastlog events whose login uid (auid, fixed at login and
 # unaffected by sudo/su) is the trusted account, since that account's own
 # logins are expected noise, not a signal worth mailing about.
 drop_trusted_login() {
-  awk -v RS='' -v ORS='\n\n' -v user="$trusted_user" '
-    $0 !~ ("(^|[[:space:]])auid=" user "([[:space:]]|$)") { print }
-  '
+  drop_events "(^|[[:space:]])auid=$trusted_user([[:space:]]|$)"
 }
 
 # $1: checkpoint file, $2: audit key, $3: label for report headers,
-# $4: optional filter function applied to the raw ausearch output.
+# $4: optional extra filter function applied to the ausearch output.
+# ausearch matches -k as a substring, so keys must not prefix one another.
 check_key() {
   local checkpoint="$1" key="$2" label="$3" filter="${4:-cat}"
   local status=0
@@ -57,7 +86,7 @@ $output
   fi
 
   local filtered
-  filtered=$(printf '%s\n' "$output" | "$filter")
+  filtered=$(printf '%s\n' "$output" | drop_rule_load | "$filter")
   if [ -n "$filtered" ]; then
     event_report+="$label on $host
 
@@ -67,7 +96,7 @@ $filtered
   fi
 }
 
-check_key "$checkpoint_main" mylnet-hardening "Watched security file events"
+check_key "$checkpoint_main" mylnet-hardening-file "Watched security file events"
 check_key "$checkpoint_login" mylnet-hardening-login "Unexpected lastlog writes (not from $trusted_user)" drop_trusted_login
 
 if [ -n "$failure_report" ]; then
