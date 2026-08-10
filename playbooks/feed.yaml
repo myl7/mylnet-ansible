@@ -46,9 +46,9 @@
       ansible.builtin.file:
         path: /srv/miniflux/db
         state: directory
-        owner: root
+        owner: 70 # postgres entrypoint chowns PGDATA to the postgres user
         group: root
-        mode: "0700" # Would be changed to 0700 by miniflux if not
+        mode: "0700" # Would be changed to 0700 by postgres if not
 
     - name: Render compose file
       ansible.builtin.template:
