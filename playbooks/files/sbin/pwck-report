@@ -2,7 +2,7 @@
 set -euo pipefail
 
 status=0
-raw=$(pwck -r 2>&1) || status=$?
+raw=$(/usr/sbin/pwck -r 2>&1) || status=$?
 
 # Drop benign lines: missing home directories and the "no changes" note.
 filtered=$(printf '%s\n' "$raw" | grep -Ev "^user '[^']+': directory '[^']+' does not exist$|^pwck: no changes$") || true
