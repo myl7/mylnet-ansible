@@ -5,6 +5,8 @@ rkhunter_allowed_hidden_files:
 proxy_sub_domain: p.myl.moe
 proxy_sub_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 proxy_sub_key: /etc/nginx/tls/cloudflare/myl.moe.key
+proxy_reality_fallback_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+proxy_reality_fallback_key: /etc/nginx/tls/cloudflare/myl.moe.key
 vaultwarden_domain: key.myl.moe
 vaultwarden_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 vaultwarden_key: /etc/nginx/tls/cloudflare/myl.moe.key

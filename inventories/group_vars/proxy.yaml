@@ -1,3 +1,8 @@
 ---
+proxy_port: 8443
+proxy_reality_server_name: panel.myl.moe
+proxy_reality_dest: panel.myl.moe:443
+proxy_reality_fallback_bytes_per_second: 10240 # 10 KiB/s
+
 proxy_ai_hostname: sg
 proxy_proxy_hostname: sg

@@ -93,12 +93,23 @@ geox-url:
 proxies:
 {% for proxy_host in proxy_hostnames %}
   - name: {{ proxy_host | to_json }}
-    type: ss
+    type: vless
     server: {{ proxy_hosts[proxy_host] | to_json }}
-    port: 8388
-    cipher: 2022-blake3-aes-128-gcm
-    password: {{ proxy_ss_passwords[proxy_host] | to_json }}
+    port: {{ proxy_port }}
     udp: true
+    uuid: {{ proxy_vless_credentials[proxy_host].uuid | to_json }}
+    flow: xtls-rprx-vision
+    packet-encoding: xudp
+    tls: true
+    servername: {{ proxy_reality_server_name | to_json }}
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: {{ proxy_vless_credentials[proxy_host].reality_public_key | to_json }}
+      short-id: {{ proxy_vless_credentials[proxy_host].reality_short_id | to_json }}
+    encryption: ""
+    network: tcp
+    smux:
+      enabled: false
 {% endfor %}
 
 proxy-groups:

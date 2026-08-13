@@ -1,0 +1,27 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ proxy_reality_server_name }};
+
+    ssl_certificate {{ proxy_reality_fallback_cert }};
+    ssl_certificate_key {{ proxy_reality_fallback_key }};
+
+    root {{ proxy_reality_fallback_root }};
+    index index.html;
+
+    location = / {
+        add_header Cache-Control "no-store";
+        include snippets/headers.conf;
+        try_files /index.html =404;
+    }
+
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+        return 204;
+    }
+
+    location / {
+        return 404;
+    }
+}

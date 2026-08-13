@@ -1,4 +1,56 @@
 ---
+- name: Prepare proxy REALITY fallback
+  hosts: sg
+  become: true
+
+  vars:
+    proxy_reality_fallback_root: /var/www/proxy-reality
+
+  tasks:
+    - name: Create proxy fallback root
+      ansible.builtin.file:
+        path: "{{ proxy_reality_fallback_root }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy proxy fallback page
+      ansible.builtin.copy:
+        src: proxy/reality-index.html
+        dest: "{{ proxy_reality_fallback_root }}/index.html"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Render proxy fallback nginx site
+      ansible.builtin.template:
+        src: proxy/reality.nginx.j2
+        dest: /etc/nginx/sites-available/proxy-reality
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check proxy fallback nginx site exists
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/proxy-reality
+      register: proxy_reality_fallback_site
+      changed_when: false
+
+    - name: Enable proxy fallback nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/proxy-reality
+        dest: /etc/nginx/sites-enabled/proxy-reality
+        state: link
+      when: proxy_reality_fallback_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
+
 - name: Deploy proxy
   hosts: proxy
 
@@ -7,22 +59,29 @@
 
   vars:
     stack_dir: /opt/stacks/proxy
-    proxy_ss_password: "{{ proxy_ss_passwords.get(inventory_hostname, '') }}"
+    proxy_vless_credential: >-
+      {{ proxy_vless_credentials.get(inventory_hostname, {}) }}
     proxy_nft_rules:
-      - 'add rule inet filter input_ipv4 tcp dport 8388 accept comment "ANSIBLE MANAGED RULE"'
-      - 'add rule inet filter input_ipv4 udp dport 8388 accept comment "ANSIBLE MANAGED RULE"'
+      - 'add rule inet filter input_ipv4 tcp dport {{ proxy_port }} accept comment "ANSIBLE MANAGED RULE"'
 
   pre_tasks:
-    - name: Default proxy_ss_passwords
+    - name: Default proxy_vless_credentials
       ansible.builtin.set_fact:
-        proxy_ss_passwords: {}
-      when: proxy_ss_passwords is undefined
+        proxy_vless_credentials: {}
+      when: proxy_vless_credentials is undefined
 
-    - name: Check proxy_ss_password
+    - name: Check proxy_vless_credentials
       ansible.builtin.assert:
         that:
-          - proxy_ss_password | trim | length > 0
-        fail_msg: 'Set proxy_ss_passwords["{{ inventory_hostname }}"] in secrets.yaml'
+          - proxy_vless_credential.uuid is defined
+          - proxy_vless_credential.uuid | trim | length > 0
+          - proxy_vless_credential.reality_private_key is defined
+          - proxy_vless_credential.reality_private_key | trim | length > 0
+          - proxy_vless_credential.reality_public_key is defined
+          - proxy_vless_credential.reality_public_key | trim | length > 0
+          - proxy_vless_credential.reality_short_id is defined
+          - proxy_vless_credential.reality_short_id | trim | length > 0
+        fail_msg: 'Set proxy_vless_credentials["{{ inventory_hostname }}"] in secrets.yaml'
         quiet: true
 
   tasks:
@@ -93,6 +152,22 @@
         pull: always
       when: stack_dir_stat.stat.exists
 
+  post_tasks:
+    - name: Remove legacy Shadowsocks nftables rules
+      become: true
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          nft -a list chain inet filter input_ipv4 |
+            awk '/(tcp|udp) dport 8388 .*comment "ANSIBLE MANAGED RULE"/ { print $NF }' |
+            while read -r handle; do
+              nft delete rule inet filter input_ipv4 handle "$handle"
+              echo changed=true
+            done
+        executable: /bin/bash
+      register: proxy_legacy_nft_remove
+      changed_when: "'changed=true' in proxy_legacy_nft_remove.stdout_lines"
+
   handlers:
     - name: Import docker handlers
       ansible.builtin.import_tasks: tasks/docker_handlers.yaml
@@ -114,10 +189,10 @@
       }}
 
   pre_tasks:
-    - name: Default proxy_ss_passwords
+    - name: Default proxy_vless_credentials
       ansible.builtin.set_fact:
-        proxy_ss_passwords: {}
-      when: proxy_ss_passwords is undefined
+        proxy_vless_credentials: {}
+      when: proxy_vless_credentials is undefined
 
     - name: Check proxy_ai_hostname and proxy_proxy_hostname
       ansible.builtin.assert:
@@ -153,11 +228,14 @@
         quiet: true
       loop: "{{ proxy_hostnames }}"
 
-    - name: Check proxy_ss_passwords for each proxy host
+    - name: Check proxy_vless_credentials for each proxy host
       ansible.builtin.assert:
         that:
-          - proxy_ss_passwords[item] is defined
-        fail_msg: 'Set proxy_ss_passwords["{{ item }}"] in secrets.yaml'
+          - proxy_vless_credentials[item] is defined
+          - proxy_vless_credentials[item].uuid is defined
+          - proxy_vless_credentials[item].reality_public_key is defined
+          - proxy_vless_credentials[item].reality_short_id is defined
+        fail_msg: 'Set proxy_vless_credentials["{{ item }}"] in secrets.yaml'
         quiet: true
       loop: "{{ proxy_hostnames }}"
 

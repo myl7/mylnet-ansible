@@ -2,13 +2,29 @@ log-level: warning
 ipv6: false
 
 listeners:
-  - name: ss-in
-    type: shadowsocks
+  - name: vless-in
+    type: vless
     listen: 0.0.0.0
-    port: "8388"
-    cipher: 2022-blake3-aes-128-gcm
-    password: "{{ proxy_ss_password }}"
-    udp: true
+    port: {{ proxy_port }}
+    users:
+      - username: {{ inventory_hostname | to_json }}
+        uuid: {{ proxy_vless_credential.uuid | to_json }}
+        flow: xtls-rprx-vision
+    reality-config:
+      dest: {{ proxy_reality_dest | to_json }}
+      private-key: {{ proxy_vless_credential.reality_private_key | to_json }}
+      short-id:
+        - {{ proxy_vless_credential.reality_short_id | to_json }}
+      server-names:
+        - {{ proxy_reality_server_name | to_json }}
+      limit-fallback-upload:
+        after-bytes: 0
+        bytes-per-sec: {{ proxy_reality_fallback_bytes_per_second }}
+        burst-bytes-per-sec: {{ proxy_reality_fallback_bytes_per_second }}
+      limit-fallback-download:
+        after-bytes: 0
+        bytes-per-sec: {{ proxy_reality_fallback_bytes_per_second }}
+        burst-bytes-per-sec: {{ proxy_reality_fallback_bytes_per_second }}
   - name: mixed-in
     type: mixed
     listen: 0.0.0.0
