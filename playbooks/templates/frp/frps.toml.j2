@@ -1,0 +1,13 @@
+bindAddr = "0.0.0.0"
+bindPort = {{ frp_bind_port }}
+
+auth.method = "token"
+auth.token = {{ frp_token | to_json }}
+
+# Control port is public; refuse plaintext connections
+transport.tls.force = true
+
+# Clients may only request this one remote port
+allowPorts = [
+  { single = {{ frp_remote_port }} },
+]

@@ -1,0 +1,19 @@
+serverAddr = "127.0.0.1"
+serverPort = {{ frp_bind_port }}
+
+auth.method = "token"
+auth.token = {{ frp_token | to_json }}
+
+# Enabled by default since v0.50; written out explicitly
+transport.tls.enable = true
+
+[[proxies]]
+name = "mc"
+type = "tcp"
+localIP = {{ frp_local_ip | to_json }}
+localPort = {{ frp_local_port }}
+remotePort = {{ frp_remote_port }}
+healthCheck.type = "tcp"
+healthCheck.timeoutSeconds = 3
+healthCheck.maxFailed = 3
+healthCheck.intervalSeconds = 10

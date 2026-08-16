@@ -1,0 +1,22 @@
+services:
+  frps:
+    image: fatedier/frps:{{ frp_version }}
+    restart: always
+    network_mode: host
+    command: -c /etc/frp/frps.toml
+    volumes:
+      - ./frps.toml:/etc/frp/frps.toml:ro
+    logging:
+      driver: local
+
+  frpc:
+    image: fatedier/frpc:{{ frp_version }}
+    restart: always
+    network_mode: host
+    command: -c /etc/frp/frpc.toml
+    volumes:
+      - ./frpc.toml:/etc/frp/frpc.toml:ro
+    depends_on:
+      - frps
+    logging:
+      driver: local

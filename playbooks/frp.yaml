@@ -1,0 +1,107 @@
+---
+- name: Deploy frp
+  hosts: sg
+
+  vars_files:
+    - secrets/secrets.yaml
+
+  vars:
+    stack_dir: /opt/stacks/frp
+    frp_version: v0.70.1
+    frp_bind_port: 1443
+    frp_remote_port: 25565
+    frp_local_ip: 100.82.157.3
+    frp_local_port: 25565
+    frp_nft_rules:
+      - 'add rule inet filter input_ipv4 tcp dport {{ frp_bind_port }} accept comment "ANSIBLE MANAGED RULE"'
+      - 'add rule inet filter input_ipv4 tcp dport {{ frp_remote_port }} accept comment "ANSIBLE MANAGED RULE"'
+
+  pre_tasks:
+    - name: Check frp_token
+      ansible.builtin.assert:
+        that:
+          - frp_token is defined
+          - frp_token | trim | length > 0
+        fail_msg: "Set frp_token in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Install nftables rules
+      become: true
+      ansible.builtin.copy:
+        content: |
+          #!/usr/sbin/nft -f
+
+          {% for frp_nft_rule in frp_nft_rules %}
+          {{ frp_nft_rule }}
+          {% endfor %}
+        dest: /etc/nftables.d/frp.nft
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply nftables rules
+      become: true
+      ansible.builtin.script:
+        cmd: >-
+          {{ playbook_dir }}/../scripts/ensure_nft.py
+          {{ (ansible_check_mode | default(false)) | ternary('--check', '') }}
+          --
+          {{ item }}
+      register: frp_nft_apply
+      changed_when: "'changed=true' in frp_nft_apply.stdout_lines"
+      check_mode: false
+      loop: "{{ frp_nft_rules }}"
+
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render frps config
+      ansible.builtin.template:
+        src: frp/frps.toml.j2
+        dest: "{{ stack_dir }}/frps.toml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0600"
+      notify: Recreate containers
+
+    - name: Render frpc config
+      ansible.builtin.template:
+        src: frp/frpc.toml.j2
+        dest: "{{ stack_dir }}/frpc.toml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0600"
+      notify: Recreate containers
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: frp/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+      when: stack_dir_stat.stat.exists
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
