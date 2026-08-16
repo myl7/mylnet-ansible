@@ -1,0 +1,13 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ osu_taste_domain }};
+
+    ssl_certificate {{ osu_taste_cert }};
+    ssl_certificate_key {{ osu_taste_key }};
+
+    location / {
+        proxy_pass http://127.0.0.1:{{ osu_taste_local_port }};
+        include snippets/rproxy.conf;
+    }
+}

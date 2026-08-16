@@ -1,0 +1,109 @@
+---
+- name: Deploy osu-taste
+  hosts: sg
+
+  vars_files:
+    - secrets/secrets.yaml
+
+  vars:
+    osu_taste_local_port: 50013
+    stack_dir: /opt/stacks/osu-taste
+
+  pre_tasks:
+    - name: Check osu_taste_domain, osu_taste_cert, and osu_taste_key
+      ansible.builtin.assert:
+        that:
+          - osu_taste_domain is defined
+          - osu_taste_cert is defined
+          - osu_taste_key is defined
+        fail_msg: "Set osu_taste_domain, osu_taste_cert and osu_taste_key"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Copy Dockerfile
+      ansible.builtin.copy:
+        src: osu-taste/Dockerfile
+        dest: "{{ stack_dir }}/Dockerfile"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+
+    - name: Copy nginx.conf
+      ansible.builtin.copy:
+        src: osu-taste/nginx.conf
+        dest: "{{ stack_dir }}/nginx.conf"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+
+    - name: Copy site dist
+      ansible.builtin.copy:
+        src: osu-taste/dist/
+        dest: "{{ stack_dir }}/dist/"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: osu-taste/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Build and start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        build: always
+      when: stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: osu-taste/osu-taste.nginx.j2
+        dest: /etc/nginx/sites-available/osu-taste
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/osu-taste
+      register: osu_taste_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/osu-taste
+        dest: /etc/nginx/sites-enabled/osu-taste
+        state: link
+      when: osu_taste_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml

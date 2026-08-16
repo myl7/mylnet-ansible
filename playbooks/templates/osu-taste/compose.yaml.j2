@@ -1,0 +1,9 @@
+services:
+  osu-taste:
+    build: .
+    image: osu-taste:latest
+    restart: always
+    ports:
+      - "127.0.0.1:{{ osu_taste_local_port }}:80"
+    logging:
+      driver: local

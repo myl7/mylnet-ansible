@@ -1,0 +1,11 @@
+services:
+  shortlink:
+    build: .
+    image: shortlink:latest
+    restart: always
+    volumes:
+      - /srv/shortlink/links.yaml:/data/links.yaml:ro
+    ports:
+      - "127.0.0.1:{{ shortlink_local_port }}:8080"
+    logging:
+      driver: local

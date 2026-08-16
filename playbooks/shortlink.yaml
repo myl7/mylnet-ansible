@@ -1,0 +1,146 @@
+---
+- name: Deploy shortlink
+  hosts: sg
+
+  vars:
+    shortlink_local_port: 50012
+    stack_dir: /opt/stacks/shortlink
+
+  pre_tasks:
+    - name: Check shortlink_domain, shortlink_cert, shortlink_key, and shortlink_links_repo
+      ansible.builtin.assert:
+        that:
+          - shortlink_domain is defined
+          - shortlink_cert is defined
+          - shortlink_key is defined
+          - shortlink_links_repo is defined
+        fail_msg: "Set shortlink_domain, shortlink_cert, shortlink_key and shortlink_links_repo"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Copy Go source
+      ansible.builtin.copy:
+        src: shortlink/main.go
+        dest: "{{ stack_dir }}/main.go"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+
+    - name: Copy go.mod
+      ansible.builtin.copy:
+        src: shortlink/go.mod
+        dest: "{{ stack_dir }}/go.mod"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+
+    - name: Copy Dockerfile
+      ansible.builtin.copy:
+        src: shortlink/Dockerfile
+        dest: "{{ stack_dir }}/Dockerfile"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: shortlink/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Create links dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/shortlink
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Get Tailscale IPv4 for Gitea SSH
+      become: true
+      ansible.builtin.command:
+        cmd: tailscale ip -4
+      register: shortlink_gitea_ssh_ip
+      changed_when: false
+      check_mode: false
+
+    - name: Configure Gitea SSH host for shortlink
+      ansible.builtin.blockinfile:
+        path: "/home/{{ username }}/.ssh/config"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+        create: true
+        marker: "# {mark} ANSIBLE MANAGED BLOCK: shortlink gitea-links"
+        block: |
+          Host gitea-links
+            HostName {{ shortlink_gitea_ssh_ip.stdout | trim }}
+            User git
+            IdentityFile ~/.ssh/id_gitea
+            StrictHostKeyChecking accept-new
+
+    - name: Clone links repo
+      ansible.builtin.git:
+        repo: "{{ shortlink_links_repo }}"
+        dest: /srv/shortlink
+        version: main
+        force: true
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Build and start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        build: always
+      when: stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: shortlink/shortlink.nginx.j2
+        dest: /etc/nginx/sites-available/shortlink
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/shortlink
+      register: shortlink_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/shortlink
+        dest: /etc/nginx/sites-enabled/shortlink
+        state: link
+      when: shortlink_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
