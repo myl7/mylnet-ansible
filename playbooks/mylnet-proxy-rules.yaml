@@ -97,6 +97,14 @@
         group: "{{ username }}"
         mode: "0755"
 
+    - name: Create backups dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/backups"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
     - name: Render compose file
       ansible.builtin.template:
         src: mylnet-proxy-rules/compose.yaml.j2

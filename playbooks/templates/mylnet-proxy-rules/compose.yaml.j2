@@ -19,6 +19,8 @@ services:
     volumes:
       - /srv/mylnet/mylnet-ansible:/srv/mylnet/mylnet-ansible
       - /srv/mylnet/mylnet-ansible-secrets:/srv/mylnet/mylnet-ansible-secrets
+      # Apply backups live on the host so they survive container recreation.
+      - ./backups:/var/lib/mylnet-proxy-rules
       # The keypair for the container's ssh to myl@sg lives here, generated on
       # this host, public half in myl's authorized_keys. Read-only is enough:
       # ssh only reads the private key.
