@@ -79,8 +79,10 @@ func (s *store) logErr(msg string) {
 }
 
 // parse reads the flat mapping format: one "code: target" pair per line,
-// "#" comments and blank lines allowed. The format is a strict subset of
-// YAML, rejected loudly on any deviation so the user sees the line number.
+// "#" comments and blank lines allowed. An inline "#" counts as a comment
+// only when preceded by whitespace, so URL fragments like "/x#frag" survive.
+// The format is a strict subset of YAML, rejected loudly on any deviation so
+// the user sees the line number.
 func parse(f *os.File) (map[string]string, error) {
 	links := make(map[string]string)
 	sc := bufio.NewScanner(f)
@@ -95,6 +97,9 @@ func parse(f *os.File) (map[string]string, error) {
 		}
 		code = strings.TrimSpace(code)
 		target = strings.TrimSpace(target)
+		if i := strings.Index(target, " #"); i >= 0 {
+			target = strings.TrimSpace(target[:i])
+		}
 		if !codeRe.MatchString(code) {
 			return nil, fmt.Errorf("line %d: invalid code %q", line, code)
 		}

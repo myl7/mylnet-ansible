@@ -25,6 +25,8 @@ func TestParse(t *testing.T) {
 # rebuttal figures
 a: https://anonymous.4open.science/r/paper1-ABCD/
 Z: https://example.com/x:8080/path
+b: https://example.com/page  # inline comment, stripped
+c: https://example.com/page#frag
 `)
 
 	f, err := os.Open(path)
@@ -42,6 +44,12 @@ Z: https://example.com/x:8080/path
 	}
 	if links["Z"] != "https://example.com/x:8080/path" {
 		t.Errorf("Z = %q", links["Z"])
+	}
+	if links["b"] != "https://example.com/page" {
+		t.Errorf("b = %q, want inline comment stripped", links["b"])
+	}
+	if links["c"] != "https://example.com/page#frag" {
+		t.Errorf("c = %q, want fragment kept", links["c"])
 	}
 }
 
