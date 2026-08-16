@@ -188,6 +188,8 @@
         ))
       }}
 
+  tags: [proxy-sub]
+
   pre_tasks:
     - name: Default proxy_vless_credentials
       ansible.builtin.set_fact:
