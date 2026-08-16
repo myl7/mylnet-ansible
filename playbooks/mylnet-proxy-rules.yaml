@@ -1,0 +1,174 @@
+---
+- name: Deploy mylnet proxy rules
+  hosts: sg
+
+  vars_files:
+    - secrets/secrets.yaml
+
+  vars:
+    prules_local_port: 50011
+    stack_dir: /opt/stacks/mylnet-proxy-rules
+
+  pre_tasks:
+    - name: Check prules_domain, prules_cert, and prules_key
+      ansible.builtin.assert:
+        that:
+          - prules_domain is defined
+          - prules_cert is defined
+          - prules_key is defined
+        fail_msg: "Set prules_domain, prules_cert and prules_key"
+        quiet: true
+
+    - name: Check proxy_sub_domain and proxy_sub_id
+      ansible.builtin.assert:
+        that:
+          - proxy_sub_domain is defined
+          - proxy_sub_id is defined
+        fail_msg: "Set proxy_sub_domain and proxy_sub_id"
+        quiet: true
+
+    - name: Check /srv/mylnet/mylnet-ansible exists
+      ansible.builtin.stat:
+        path: /srv/mylnet/mylnet-ansible
+      register: prules_ansible_dir
+      changed_when: false
+
+    - name: Check /srv/mylnet/mylnet-ansible-secrets exists
+      ansible.builtin.stat:
+        path: /srv/mylnet/mylnet-ansible-secrets
+      register: prules_secrets_dir
+      changed_when: false
+
+    - name: Check /srv/mylnet/mylnet-proxy-rules exists
+      ansible.builtin.stat:
+        path: /srv/mylnet/mylnet-proxy-rules
+      register: prules_app_dir
+      changed_when: false
+
+    - name: Check secrets.yaml exists
+      ansible.builtin.stat:
+        path: /srv/mylnet/mylnet-ansible-secrets/secrets.yaml
+      register: prules_secrets_file
+      changed_when: false
+
+    - name: Check clash_rules_extend.yaml exists
+      ansible.builtin.stat:
+        path: /srv/mylnet/mylnet-ansible-secrets/clash_rules_extend.yaml
+      register: prules_rules_file
+      changed_when: false
+
+    - name: Check /srv/mylnet/.ssh exists
+      ansible.builtin.stat:
+        path: /srv/mylnet/.ssh
+      register: prules_ssh_dir
+      changed_when: false
+
+    - name: Check /srv/mylnet checkouts
+      ansible.builtin.assert:
+        that:
+          - prules_ansible_dir.stat.exists
+          - prules_secrets_dir.stat.exists
+          - prules_app_dir.stat.exists
+          - prules_secrets_file.stat.exists
+          - prules_rules_file.stat.exists
+          - prules_ssh_dir.stat.exists
+        fail_msg: "Clone mylnet-ansible, mylnet-ansible-secrets and mylnet-proxy-rules into /srv/mylnet and add /srv/mylnet/.ssh"
+        quiet: true
+
+    - name: Check secrets.yaml is decrypted
+      ansible.builtin.command:
+        cmd: head -c 8 /srv/mylnet/mylnet-ansible-secrets/secrets.yaml
+      register: prules_secrets_head
+      changed_when: false
+
+    - name: Assert secrets.yaml is decrypted
+      ansible.builtin.assert:
+        that:
+          - prules_secrets_head.stdout != "GITCRYPT"
+        fail_msg: "Unlock git-crypt in /srv/mylnet/mylnet-ansible-secrets before deploying mylnet-proxy-rules"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: mylnet-proxy-rules/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Build and start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: never
+        build: always
+      when: stack_dir_stat.stat.exists
+
+    - name: Create htpasswd dir
+      become: true
+      ansible.builtin.file:
+        path: /etc/nginx/htpasswd
+        state: directory
+        owner: root
+        group: www-data
+        mode: "0750"
+
+    - name: Write htpasswd
+      become: true
+      ansible.builtin.copy:
+        src: secrets/htpasswd/mylnet-proxy-rules
+        dest: /etc/nginx/htpasswd/mylnet-proxy-rules
+        owner: root
+        group: www-data
+        mode: "0640"
+      notify: Reload nginx
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: mylnet-proxy-rules/mylnet-proxy-rules.nginx.j2
+        dest: /etc/nginx/sites-available/mylnet-proxy-rules
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/mylnet-proxy-rules
+      register: prules_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/mylnet-proxy-rules
+        dest: /etc/nginx/sites-enabled/mylnet-proxy-rules
+        state: link
+      when: prules_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
