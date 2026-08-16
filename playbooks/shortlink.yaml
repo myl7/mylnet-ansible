@@ -83,11 +83,9 @@
         group: "{{ username }}"
         mode: "0644"
         create: true
-        marker: "# {mark} ANSIBLE MANAGED BLOCK: shortlink gitea-links"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK: shortlink gitea ssh"
         block: |
-          Host gitea-links
-            HostName {{ shortlink_gitea_ssh_ip.stdout | trim }}
-            User git
+          Host {{ shortlink_gitea_ssh_ip.stdout | trim }}
             IdentityFile ~/.ssh/id_gitea
             StrictHostKeyChecking accept-new
 

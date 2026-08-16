@@ -4,7 +4,9 @@ services:
     image: shortlink:latest
     restart: always
     volumes:
-      - /srv/shortlink/links.yaml:/data/links.yaml:ro
+      # Mount the directory, not the file: git replaces links.yaml via
+      # rename, and a file-level bind mount keeps pointing at the old inode.
+      - /srv/shortlink:/data:ro
     ports:
       - "127.0.0.1:{{ shortlink_local_port }}:8080"
     logging:
