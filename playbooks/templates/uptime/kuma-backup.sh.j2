@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+BAKDIR=/opt/stacks/uptime/backups
+mkdir -p "$BAKDIR"
+if docker exec uptime-uptime_kuma-1 test -f /app/data/kuma.db; then
+  docker exec uptime-uptime_kuma-1 sh -c "sqlite3 /app/data/kuma.db \".backup /app/data/backup.sqlite\""
+  docker cp uptime-uptime_kuma-1:/app/data/backup.sqlite "$BAKDIR/kuma-$(date +%F).sqlite"
+fi
+find "$BAKDIR" -name "kuma-*.sqlite" -mtime +30 -delete

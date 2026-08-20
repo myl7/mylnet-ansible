@@ -83,6 +83,45 @@
       when: uptime_site.stat.exists
       notify: Reload nginx
 
+    - name: Remove status-ctu site
+      become: true
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/status-ctu
+        state: absent
+      notify: Reload nginx
+
+    - name: Remove status-ctu site config
+      become: true
+      ansible.builtin.file:
+        path: /etc/nginx/sites-available/status-ctu
+        state: absent
+
+    - name: Create backups dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/backups"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render backup script
+      ansible.builtin.template:
+        src: uptime/kuma-backup.sh.j2
+        dest: "{{ stack_dir }}/backup.sh"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Configure kuma backup cron
+      become: true
+      ansible.builtin.cron:
+        name: Backup uptime-kuma data
+        cron_file: uptime-kuma-backup
+        user: root
+        minute: "17"
+        hour: "2"
+        job: "{{ stack_dir }}/backup.sh"
+
   handlers:
     - name: Import docker handlers
       ansible.builtin.import_tasks: tasks/docker_handlers.yaml
