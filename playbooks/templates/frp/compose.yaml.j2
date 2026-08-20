@@ -1,6 +1,6 @@
 services:
   frps:
-    image: fatedier/frps:{{ frp_version }}
+    image: snowdreamtech/frps:latest
     restart: always
     network_mode: host
     command: -c /etc/frp/frps.toml
@@ -10,7 +10,7 @@ services:
       driver: local
 
   frpc:
-    image: fatedier/frpc:{{ frp_version }}
+    image: snowdreamtech/frpc:latest
     restart: always
     network_mode: host
     command: -c /etc/frp/frpc.toml

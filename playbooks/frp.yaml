@@ -7,7 +7,6 @@
 
   vars:
     stack_dir: /opt/stacks/frp
-    frp_version: v0.70.1
     frp_bind_port: 1443
     frp_remote_port: 25565
     frp_local_ip: 100.82.157.3

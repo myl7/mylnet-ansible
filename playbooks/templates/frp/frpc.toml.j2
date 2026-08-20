@@ -1,6 +1,9 @@
 serverAddr = "127.0.0.1"
 serverPort = {{ frp_bind_port }}
 
+# Keep retrying when frps is not up yet, e.g., right after container recreation
+loginFailExit = false
+
 auth.method = "token"
 auth.token = {{ frp_token | to_json }}
 
