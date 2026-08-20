@@ -44,6 +44,6 @@ shortlink_domain: my6.co
 shortlink_cert: /etc/nginx/tls/cloudflare/my6.co.pem
 shortlink_key: /etc/nginx/tls/cloudflare/my6.co.key
 shortlink_links_repo: git@100.97.128.26:myl7/sl.git
-osu_taste_domain: taste.myl.moe
+osu_taste_domain: osu.myl.moe
 osu_taste_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 osu_taste_key: /etc/nginx/tls/cloudflare/myl.moe.key
