@@ -8,6 +8,8 @@
   vars:
     osu_taste_local_port: 50013
     stack_dir: /opt/stacks/osu-taste
+    # Built site output, on the control node. Keep build artifacts out of this repo.
+    osu_taste_local_dist: /Users/myl/app/osu-taste/dist
 
   pre_tasks:
     - name: Check osu_taste_domain, osu_taste_cert, and osu_taste_key
@@ -46,7 +48,7 @@
 
     - name: Copy site dist
       ansible.builtin.copy:
-        src: osu-taste/dist/
+        src: "{{ osu_taste_local_dist }}/"
         dest: "{{ stack_dir }}/dist/"
         owner: "{{ username }}"
         group: "{{ username }}"
