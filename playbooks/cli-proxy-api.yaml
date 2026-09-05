@@ -13,6 +13,11 @@
     stack_dir: /opt/stacks/cli-proxy-api
 
   pre_tasks:
+    - name: Default cliproxy_github_token
+      ansible.builtin.set_fact:
+        cliproxy_github_token: ""
+      when: cliproxy_github_token is undefined
+
     - name: Check cliproxy_domain, cliproxy_cert, and cliproxy_key
       ansible.builtin.assert:
         that:
@@ -56,13 +61,24 @@
         group: "{{ username }}"
         mode: "0755"
 
-    - name: Render config
+    - name: Create plugins dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/cli-proxy-api/plugins
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Seed config
+      # Seed only (force: false): the management panel edits config.yaml at runtime, re-rendering would clobber those edits
       ansible.builtin.template:
         src: cli-proxy-api/config.yaml.j2
         dest: "{{ stack_dir }}/config.yaml"
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0600"
+        force: false
       notify: Recreate containers
 
     - name: Render compose file

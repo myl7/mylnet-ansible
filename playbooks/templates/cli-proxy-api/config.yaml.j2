@@ -15,3 +15,11 @@ remote-management:
   disable-control-panel: false
 
 logging-to-file: false
+
+plugins:
+  enabled: true
+  store-auth:
+    # Downloads from api.github.com use the GitHub token from CLIPROXY_GITHUB_TOKEN
+    - match: "https://api.github.com"
+      type: github-token
+      token-env: CLIPROXY_GITHUB_TOKEN

@@ -6,6 +6,10 @@ services:
     volumes:
       - ./config.yaml:/CLIProxyAPI/config.yaml
       - /srv/cli-proxy-api/auths:/root/.cli-proxy-api
+      - /srv/cli-proxy-api/plugins:/CLIProxyAPI/plugins
+    environment:
+      # Used by plugins store-auth to download plugins with a higher GitHub rate limit
+      - CLIPROXY_GITHUB_TOKEN={{ cliproxy_github_token }}
     ports:
       - "127.0.0.1:{{ cliproxy_local_port }}:8317"
       # Management panel, reachable from the tailnet only
