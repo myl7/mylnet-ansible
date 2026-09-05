@@ -47,3 +47,6 @@ shortlink_links_repo: git@100.97.128.26:myl7/sl.git
 osu_taste_domain: osu.myl.moe
 osu_taste_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 osu_taste_key: /etc/nginx/tls/cloudflare/myl.moe.key
+cliproxy_domain: ai.myl.moe
+cliproxy_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+cliproxy_key: /etc/nginx/tls/cloudflare/myl.moe.key

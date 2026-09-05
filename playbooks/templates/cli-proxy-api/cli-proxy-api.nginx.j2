@@ -1,0 +1,31 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ cliproxy_domain }};
+
+    ssl_certificate {{ cliproxy_cert }};
+    ssl_certificate_key {{ cliproxy_key }};
+
+    client_max_body_size 64m;
+
+    # Management panel and API are served on the Tailscale binding only
+    location = /management.html {
+        return 404;
+    }
+
+    location ^~ /v0/management {
+        return 404;
+    }
+
+    location ^~ /v0/resource/plugins/ {
+        return 404;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:{{ cliproxy_local_port }};
+        include snippets/rproxy.conf;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_buffering off;
+    }
+}

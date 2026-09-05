@@ -1,0 +1,114 @@
+---
+- name: Deploy CLI Proxy API
+  hosts: sg
+
+  vars_files:
+    - secrets/secrets.yaml
+
+  vars:
+    cliproxy_local_port: 50014
+    cliproxy_tailscale_port: 50015
+    # The management panel is published on the Tailscale IP only, the public nginx site blocks management paths.
+    cliproxy_bind_ip: "{{ cliproxy_tailscale_ip.stdout | trim }}"
+    stack_dir: /opt/stacks/cli-proxy-api
+
+  pre_tasks:
+    - name: Check cliproxy_domain, cliproxy_cert, and cliproxy_key
+      ansible.builtin.assert:
+        that:
+          - cliproxy_domain is defined
+          - cliproxy_cert is defined
+          - cliproxy_key is defined
+        fail_msg: "Set cliproxy_domain, cliproxy_cert and cliproxy_key in host_vars/sg.yaml"
+        quiet: true
+
+    - name: Check cliproxy_api_key and cliproxy_management_key
+      ansible.builtin.assert:
+        that:
+          - cliproxy_api_key is defined
+          - cliproxy_management_key is defined
+        fail_msg: "Set cliproxy_api_key and cliproxy_management_key in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Get Tailscale IPv4
+      become: true
+      ansible.builtin.command:
+        cmd: tailscale ip -4
+      register: cliproxy_tailscale_ip
+      changed_when: false
+      check_mode: false
+
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create auths dir
+      become: true
+      ansible.builtin.file:
+        path: /srv/cli-proxy-api/auths
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render config
+      ansible.builtin.template:
+        src: cli-proxy-api/config.yaml.j2
+        dest: "{{ stack_dir }}/config.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0600"
+      notify: Recreate containers
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: cli-proxy-api/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+      when: stack_dir_stat.stat.exists
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: cli-proxy-api/cli-proxy-api.nginx.j2
+        dest: /etc/nginx/sites-available/cli-proxy-api
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/cli-proxy-api
+        dest: /etc/nginx/sites-enabled/cli-proxy-api
+        state: link
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml

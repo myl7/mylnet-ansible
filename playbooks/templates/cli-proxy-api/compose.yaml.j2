@@ -1,0 +1,19 @@
+services:
+  cli-proxy-api:
+    image: eceasy/cli-proxy-api
+    restart: always
+    container_name: cli-proxy-api
+    volumes:
+      - ./config.yaml:/CLIProxyAPI/config.yaml
+      - /srv/cli-proxy-api/auths:/root/.cli-proxy-api
+    ports:
+      - "127.0.0.1:{{ cliproxy_local_port }}:8317"
+      # Management panel, reachable from the tailnet only
+      - "{{ cliproxy_bind_ip }}:{{ cliproxy_tailscale_port }}:8317"
+      # OAuth callback ports, bound to loopback for SSH tunnel login, e.g.
+      # ssh -L 8085:127.0.0.1:8085 sg
+      - "127.0.0.1:8085:8085" # Gemini
+      - "127.0.0.1:1455:1455" # Codex
+      - "127.0.0.1:54545:54545" # Claude
+    logging:
+      driver: local

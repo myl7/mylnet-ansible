@@ -1,0 +1,17 @@
+host: "0.0.0.0" # reachable only via the host loopback/nginx and Tailscale bindings
+port: 8317
+
+# Client authentication for the API endpoints
+api-keys:
+  - {{ cliproxy_api_key | to_json }}
+
+auth-dir: "/root/.cli-proxy-api"
+
+# Management center for OAuth logins and key management, authenticated by the secret key.
+# The panel is served on the Tailscale binding only; the public nginx site blocks these paths.
+remote-management:
+  allow-remote: true
+  secret-key: {{ cliproxy_management_key | to_json }}
+  disable-control-panel: false
+
+logging-to-file: false
