@@ -362,9 +362,14 @@ def pdf_to_postscript(data: bytes) -> bytes:
     gs = shutil.which("gs")
     if not gs:
         raise RuntimeError("ghostscript is not installed, use --format raw")
+    # SetPageSize=false drops the per page PageSize request that ps2write
+    # normally emits. That request, combined with the save and restore the same
+    # output wraps around every page, made the printer finish each sheet on one
+    # side. Duplex only survives if the page device is left alone for the whole
+    # job. The printer keeps whatever media it has loaded instead.
     result = subprocess.run(
-        [gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=ps2write",
-         "-sOutputFile=-", "-"],
+        [gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-dSetPageSize=false",
+         "-sDEVICE=ps2write", "-sOutputFile=-", "-"],
         input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     if result.returncode != 0 or not result.stdout:
@@ -373,12 +378,42 @@ def pdf_to_postscript(data: bytes) -> bytes:
     return result.stdout
 
 
+PS_DUPLEX = {
+    "off": (b"None", b"<</Duplex false>>setpagedevice"),
+    "long": (b"DuplexNoTumble", b"<</Duplex true/Tumble false>>setpagedevice"),
+    "short": (b"DuplexTumble", b"<</Duplex true/Tumble true>>setpagedevice"),
+}
+
+
+def set_ps_duplex(data: bytes, duplex: str) -> bytes:
+    """Ask for duplex in the PostScript itself, as well as in PJL.
+
+    PJL alone is enough on the printer here, but only for jobs that leave the
+    page device alone. Asking twice costs nothing and covers documents that
+    carry their own setup. The call runs inside stopped so a printer with no
+    duplex unit ignores the request instead of failing the whole job."""
+    entry = PS_DUPLEX.get(duplex)
+    if entry is None:
+        return data
+    feature, call = entry
+    block = (b"%%BeginFeature: *Duplex " + feature + b"\n"
+             b"mark{" + call + b"}stopped pop cleartomark\n"
+             b"%%EndFeature\n")
+    if b"%%EndSetup" in data:
+        return data.replace(b"%%EndSetup", block + b"%%EndSetup", 1)
+    wrapped = b"%%BeginSetup\n" + block + b"%%EndSetup\n"
+    if b"%%EndProlog\n" in data:
+        return data.replace(b"%%EndProlog\n", b"%%EndProlog\n" + wrapped, 1)
+    head, sep, tail = data.partition(b"\n")
+    if not sep:
+        return data
+    return head + sep + wrapped + tail
+
+
 def wrap_pjl(data: bytes, *, copies: int, duplex: str, job_name: str) -> bytes:
     """Add a PJL header for copies and duplex. Skipped when the job already
     carries one, so we never nest two PJL envelopes."""
     if detect_language(data) == "PJL":
-        return data
-    if copies <= 1 and duplex == "default":
         return data
     language = detect_language(data)
     if language not in ("POSTSCRIPT", "PCL", "PDF"):
@@ -407,6 +442,8 @@ def prepare(data: bytes, *, fmt: str, copies: int, duplex: str, job_name: str) -
             note = "pdf converted to postscript"
         elif language not in ("POSTSCRIPT", "PJL"):
             raise RuntimeError(f"cannot convert {language} to postscript")
+    if detect_language(data) == "POSTSCRIPT":
+        data = set_ps_duplex(data, duplex)
     return wrap_pjl(data, copies=copies, duplex=duplex, job_name=job_name), note
 
 
