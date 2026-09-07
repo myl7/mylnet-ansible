@@ -50,3 +50,25 @@ osu_taste_key: /etc/nginx/tls/cloudflare/myl.moe.key
 cliproxy_domain: ai.myl.moe
 cliproxy_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 cliproxy_key: /etc/nginx/tls/cloudflare/myl.moe.key
+cityu_print_domain: cityu-print.myl.moe
+cityu_print_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+cityu_print_key: /etc/nginx/tls/cloudflare/myl.moe.key
+cityu_print_socks_host: 100.69.54.3
+cityu_print_socks_port: 10800
+cityu_print_server: 144.214.36.203
+cityu_print_queue: g7352
+cityu_print_queues:
+  - g7352
+  - G7356
+  - G7751
+  - G7C
+  - Y6407
+  - Y7714
+  - MMW2462
+  - Inno_01
+  - Inno_02
+  - inno_03
+  - Inno_04
+  - Inno_05
+cityu_print_job_user: cityu-print.myl.moe
+cityu_print_job_origin: cityu-print.myl.moe

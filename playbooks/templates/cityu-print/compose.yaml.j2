@@ -1,0 +1,29 @@
+services:
+  cityu-print:
+    build: .
+    image: cityu-print:latest
+    restart: always
+    command:
+      # The printer sits on a network only cu can reach, so every LPD
+      # connection is dialled through the SOCKS5 proxy cu keeps open on the
+      # tailnet. Docker masquerades the bridge onto tailscale0, which is why
+      # the tailnet address works from inside the container.
+      - "--transport"
+      - "socks5://{{ cityu_print_socks_host }}:{{ cityu_print_socks_port }}"
+      - "--server"
+      - "{{ cityu_print_server }}"
+      - "--queue"
+      - "{{ cityu_print_queue }}"
+      - "--queues"
+      - "{{ cityu_print_queues | join(',') }}"
+      - "--user"
+      - "{{ cityu_print_job_user }}"
+      - "--origin"
+      - "{{ cityu_print_job_origin }}"
+      # Published on loopback only, so nginx stays the single way in.
+      - "--bind"
+      - "0.0.0.0"
+    ports:
+      - "127.0.0.1:{{ cityu_print_local_port }}:8631"
+    logging:
+      driver: local

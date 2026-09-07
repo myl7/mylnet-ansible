@@ -1,0 +1,23 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ cityu_print_domain }};
+
+    ssl_certificate {{ cityu_print_cert }};
+    ssl_certificate_key {{ cityu_print_key }};
+
+    # Uploads are whole documents. The app refuses anything past 256 MB.
+    client_max_body_size 256m;
+
+    location / {
+        auth_basic "cityu-print";
+        auth_basic_user_file /etc/nginx/htpasswd/cityu-print;
+        proxy_pass http://127.0.0.1:{{ cityu_print_local_port }};
+        include snippets/rproxy.conf;
+
+        # A job crosses the SOCKS proxy to Hong Kong before the reply comes
+        # back, and a large PostScript file takes a while over a relay.
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}

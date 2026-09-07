@@ -1,0 +1,135 @@
+---
+- name: Deploy cityu-print
+  hosts: sg
+
+  vars:
+    cityu_print_local_port: 50016
+    stack_dir: /opt/stacks/cityu-print
+
+  pre_tasks:
+    - name: Check cityu_print_domain, cityu_print_cert, cityu_print_key, and cityu_print_socks_host
+      ansible.builtin.assert:
+        that:
+          - cityu_print_domain is defined
+          - cityu_print_cert is defined
+          - cityu_print_key is defined
+          - cityu_print_socks_host is defined
+          - cityu_print_socks_port is defined
+        fail_msg: "Set cityu_print_domain, cityu_print_cert, cityu_print_key, cityu_print_socks_host and cityu_print_socks_port"
+        quiet: true
+
+    - name: Check the htpasswd file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/secrets/htpasswd/cityu-print"
+      register: cityu_print_htpasswd
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Fail without an htpasswd file
+      ansible.builtin.assert:
+        that:
+          - cityu_print_htpasswd.stat.exists
+        fail_msg: "Create playbooks/secrets/htpasswd/cityu-print, the site is public without it"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Copy application
+      ansible.builtin.copy:
+        src: cityu-print/cityu_print.py
+        dest: "{{ stack_dir }}/cityu_print.py"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Copy Dockerfile
+      ansible.builtin.copy:
+        src: cityu-print/Dockerfile
+        dest: "{{ stack_dir }}/Dockerfile"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: cityu-print/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    - name: Build and start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        build: always
+      when: stack_dir_stat.stat.exists
+
+    - name: Create htpasswd dir
+      become: true
+      ansible.builtin.file:
+        path: /etc/nginx/htpasswd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Write htpasswd
+      become: true
+      ansible.builtin.copy:
+        src: secrets/htpasswd/cityu-print
+        dest: /etc/nginx/htpasswd/cityu-print
+        owner: root
+        group: www-data
+        mode: "0640"
+      notify: Reload nginx
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: cityu-print/cityu-print.nginx.j2
+        dest: /etc/nginx/sites-available/cityu-print
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/cityu-print
+      register: cityu_print_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/cityu-print
+        dest: /etc/nginx/sites-enabled/cityu-print
+        state: link
+      when: cityu_print_site.stat.exists
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
