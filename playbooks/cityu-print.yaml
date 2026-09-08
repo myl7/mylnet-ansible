@@ -5,6 +5,9 @@
   vars:
     cityu_print_local_port: 50016
     stack_dir: /opt/stacks/cityu-print
+    # The application is its own project. Until it has a git remote to build
+    # from, the deploy reads it out of the checkout next to this repository.
+    cityu_print_src: "{{ playbook_dir }}/../../cityu-print"
 
   pre_tasks:
     - name: Check cityu_print_domain, cityu_print_cert, cityu_print_key, and cityu_print_socks_host
@@ -16,6 +19,20 @@
           - cityu_print_socks_host is defined
           - cityu_print_socks_port is defined
         fail_msg: "Set cityu_print_domain, cityu_print_cert, cityu_print_key, cityu_print_socks_host and cityu_print_socks_port"
+        quiet: true
+
+    - name: Check the application checkout exists
+      ansible.builtin.stat:
+        path: "{{ cityu_print_src }}/cityu_print.py"
+      register: cityu_print_app
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Fail without the application checkout
+      ansible.builtin.assert:
+        that:
+          - cityu_print_app.stat.exists
+        fail_msg: "Clone cityu-print next to this repository, or set cityu_print_src"
         quiet: true
 
     - name: Check the htpasswd file exists
@@ -43,7 +60,7 @@
 
     - name: Copy application
       ansible.builtin.copy:
-        src: cityu-print/cityu_print.py
+        src: "{{ cityu_print_src }}/cityu_print.py"
         dest: "{{ stack_dir }}/cityu_print.py"
         owner: "{{ username }}"
         group: "{{ username }}"
@@ -52,7 +69,7 @@
 
     - name: Copy Dockerfile
       ansible.builtin.copy:
-        src: cityu-print/Dockerfile
+        src: "{{ cityu_print_src }}/Dockerfile"
         dest: "{{ stack_dir }}/Dockerfile"
         owner: "{{ username }}"
         group: "{{ username }}"
