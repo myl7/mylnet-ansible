@@ -55,12 +55,6 @@
         mode: "0644"
         state: present
 
-    - name: Check Docker apt source exists
-      ansible.builtin.stat:
-        path: /etc/apt/sources.list.d/docker.sources
-      register: docker_apt_source
-      changed_when: false
-
     - name: Install Docker
       ansible.builtin.apt:
         name:
@@ -68,21 +62,18 @@
           - docker-compose-plugin
         state: present
         update_cache: true
-      when: docker_apt_source.stat.exists
 
     - name: Start and enable Docker
       ansible.builtin.systemd_service:
         name: docker
         state: started
         enabled: true
-      when: docker_apt_source.stat.exists
 
     - name: Add user to docker group
       ansible.builtin.user:
         name: "{{ username }}"
         groups: docker
         append: true
-      when: docker_apt_source.stat.exists
 
     - name: Create Docker stack dir
       ansible.builtin.file:

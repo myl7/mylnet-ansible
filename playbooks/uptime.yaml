@@ -43,19 +43,12 @@
         mode: "0644"
       notify: Recreate containers
 
-    - name: Check stack dir exists
-      ansible.builtin.stat:
-        path: "{{ stack_dir }}"
-      register: stack_dir_stat
-      changed_when: false
-
     - name: Start containers
       community.docker.docker_compose_v2:
         project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: stack_dir_stat.stat.exists
 
     - name: Render nginx site
       become: true
@@ -67,20 +60,12 @@
         mode: "0644"
       notify: Reload nginx
 
-    - name: Check nginx site exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/nginx/sites-available/uptime
-      register: uptime_site
-      changed_when: false
-
     - name: Enable nginx site
       become: true
       ansible.builtin.file:
         src: /etc/nginx/sites-available/uptime
         dest: /etc/nginx/sites-enabled/uptime
         state: link
-      when: uptime_site.stat.exists
       notify: Reload nginx
 
     - name: Remove status-ctu site

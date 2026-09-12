@@ -11,7 +11,7 @@ MANAGED_COMMENT = "ANSIBLE MANAGED RULE"
 SUPPORTED_VERDICTS = {"accept", "drop"}
 
 USAGE = f"""Usage:
-    ensure_nft.py [--check] add rule FAMILY TABLE CHAIN MATCH VERDICT comment "{MANAGED_COMMENT}"
+    ensure_nft.py add rule FAMILY TABLE CHAIN MATCH VERDICT comment "{MANAGED_COMMENT}"
 
 Supported MATCH:
     tcp|udp sport|dport PORT
@@ -138,21 +138,7 @@ def parse_managed_comment(tokens: list[str]) -> tuple[list[str], str]:
     return statement_tokens, comment
 
 
-def parse_args(argv: list[str]) -> tuple[bool, Rule]:
-    check = False
-
-    while argv:
-        if argv[0] == "--check":
-            check = True
-            argv = argv[1:]
-        elif argv[0] == "--":
-            argv = argv[1:]
-            break
-        elif argv[0].startswith("--"):
-            fail(f"Unsupported option: {argv[0]}")
-        else:
-            break
-
+def parse_args(argv: list[str]) -> Rule:
     if len(argv) < 11:
         fail(f'Managed nft rules must include comment "{MANAGED_COMMENT}".')
 
@@ -166,7 +152,7 @@ def parse_args(argv: list[str]) -> tuple[bool, Rule]:
     validate_name("chain", chain)
 
     statement_tokens, comment = parse_managed_comment(argv[5:])
-    return check, Rule(
+    return Rule(
         family=family,
         table=table,
         chain=chain,
@@ -280,7 +266,7 @@ def delete_rule(rule: Rule, handle: str) -> None:
 
 
 def main(argv: list[str]) -> int:
-    check, rule = parse_args(argv)
+    rule = parse_args(argv)
     entries = managed_rules(list_chain(rule), rule)
     exact_count = sum(entry.body == rule.body for entry in entries)
 
@@ -291,9 +277,6 @@ def main(argv: list[str]) -> int:
         return 0
 
     print("changed=true")
-    if check:
-        return 0
-
     add_rule(rule)
     for entry in entries:
         delete_rule(rule, entry.handle)

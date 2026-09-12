@@ -44,12 +44,9 @@
       ansible.builtin.script:
         cmd: >-
           {{ playbook_dir }}/../scripts/ensure_nft.py
-          {{ (ansible_check_mode | default(false)) | ternary('--check', '') }}
-          --
           {{ item }}
       register: frp_nft_apply
       changed_when: "'changed=true' in frp_nft_apply.stdout_lines"
-      check_mode: false
       loop: "{{ frp_nft_rules }}"
 
     - name: Create stack dir
@@ -87,19 +84,12 @@
         mode: "0644"
       notify: Recreate containers
 
-    - name: Check stack dir exists
-      ansible.builtin.stat:
-        path: "{{ stack_dir }}"
-      register: stack_dir_stat
-      changed_when: false
-
     - name: Start containers
       community.docker.docker_compose_v2:
         project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: stack_dir_stat.stat.exists
 
   handlers:
     - name: Import docker handlers

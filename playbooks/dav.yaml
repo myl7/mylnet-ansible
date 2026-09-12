@@ -69,13 +69,6 @@
         mode: "0644"
       notify: Restart rclone dav
 
-    - name: Check rclone dav service exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/systemd/system/rclone-dav.service
-      register: dav_service
-      changed_when: false
-
     - name: Start and enable rclone dav
       become: true
       ansible.builtin.systemd_service:
@@ -83,7 +76,6 @@
         state: started
         enabled: true
         daemon_reload: true
-      when: dav_service.stat.exists
 
     - name: Create htpasswd dir
       become: true
@@ -114,20 +106,12 @@
         mode: "0644"
       notify: Reload nginx
 
-    - name: Check nginx site exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/nginx/sites-available/dav
-      register: dav_site
-      changed_when: false
-
     - name: Enable nginx site
       become: true
       ansible.builtin.file:
         src: /etc/nginx/sites-available/dav
         dest: /etc/nginx/sites-enabled/dav
         state: link
-      when: dav_site.stat.exists
       notify: Reload nginx
 
   handlers:
@@ -137,7 +121,6 @@
         cmd: systemd-analyze verify rclone-dav.service
       changed_when: false
       listen: Restart rclone dav
-      when: dav_service.stat.exists
 
     - name: Restart rclone dav
       become: true
@@ -145,7 +128,6 @@
         name: rclone-dav
         state: restarted
         daemon_reload: true
-      when: dav_service.stat.exists
 
     - name: Import nginx handlers
       ansible.builtin.import_tasks: tasks/nginx_handlers.yaml

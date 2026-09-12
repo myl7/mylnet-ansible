@@ -44,9 +44,8 @@ def completed(args, returncode=0, stdout="", stderr=""):
 
 class ParseArgsTest(unittest.TestCase):
     def test_parse_valid_rule(self):
-        check, rule = ensure_nft.parse_args(RULE_ARGS)
+        rule = ensure_nft.parse_args(RULE_ARGS)
 
-        self.assertFalse(check)
         self.assertEqual(rule.family, "inet")
         self.assertEqual(rule.table, "filter")
         self.assertEqual(rule.chain, "input_ipv4")
@@ -56,16 +55,10 @@ class ParseArgsTest(unittest.TestCase):
             'add rule inet filter input_ipv4 tcp dport 8388 accept comment "ANSIBLE MANAGED RULE"',
         )
 
-    def test_parse_check_and_separator(self):
-        check, rule = ensure_nft.parse_args(["--check", "--", *RULE_ARGS])
-
-        self.assertTrue(check)
-        self.assertEqual(rule.statement.identity, ("tcp", "dport", "8388"))
-
     def test_parse_sport_and_drop(self):
         args = nft_args(["udp", "sport", "5353", "drop"])
 
-        _, rule = ensure_nft.parse_args(args)
+        rule = ensure_nft.parse_args(args)
 
         self.assertEqual(rule.statement.tokens, ["udp", "sport", "5353", "drop"])
         self.assertEqual(rule.body, 'udp sport 5353 drop comment "ANSIBLE MANAGED RULE"')
@@ -92,7 +85,7 @@ class ParseArgsTest(unittest.TestCase):
 
 class ManagedRulesTest(unittest.TestCase):
     def setUp(self):
-        _, self.rule = ensure_nft.parse_args(RULE_ARGS)
+        self.rule = ensure_nft.parse_args(RULE_ARGS)
 
     def test_managed_rules_match_only_same_identity_and_comment(self):
         chain_rules = """
@@ -143,7 +136,7 @@ table inet filter {
 
 class NftCommandTest(unittest.TestCase):
     def setUp(self):
-        _, self.rule = ensure_nft.parse_args(RULE_ARGS)
+        self.rule = ensure_nft.parse_args(RULE_ARGS)
 
     def test_list_chain_success(self):
         with mock.patch.object(ensure_nft, "run_nft", return_value=completed([], stdout="rules")) as run_nft:
@@ -198,9 +191,7 @@ class NftCommandTest(unittest.TestCase):
 
 
 class MainTest(unittest.TestCase):
-    def run_main(self, chain_rules, args=None):
-        if args is None:
-            args = RULE_ARGS
+    def run_main(self, chain_rules):
         stdout = io.StringIO()
         with (
             mock.patch.object(ensure_nft, "list_chain", return_value=chain_rules),
@@ -208,7 +199,7 @@ class MainTest(unittest.TestCase):
             mock.patch.object(ensure_nft, "delete_rule") as delete_rule,
             contextlib.redirect_stdout(stdout),
         ):
-            rc = ensure_nft.main(args)
+            rc = ensure_nft.main(RULE_ARGS)
 
         return rc, stdout.getvalue().splitlines(), add_rule, delete_rule
 
@@ -260,14 +251,6 @@ table inet filter {
         self.assertIn("changed=true", lines)
         add_rule.assert_called_once()
         delete_rule.assert_called_once_with(mock.ANY, "13")
-
-    def test_check_mode_reports_changed_without_mutation(self):
-        rc, lines, add_rule, delete_rule = self.run_main("", ["--check", "--", *RULE_ARGS])
-
-        self.assertEqual(rc, 0)
-        self.assertIn("changed=true", lines)
-        add_rule.assert_not_called()
-        delete_rule.assert_not_called()
 
     def test_add_failure_does_not_delete_old_managed_rule(self):
         chain_rules = """

@@ -113,12 +113,9 @@
       ansible.builtin.script:
         cmd: >-
           {{ playbook_dir }}/../scripts/ensure_nft.py
-          {{ (ansible_check_mode | default(false)) | ternary('--check', '') }}
-          --
           {{ item }}
       register: syncthing_nft_apply
       changed_when: "'changed=true' in syncthing_nft_apply.stdout_lines"
-      check_mode: false
       loop: "{{ syncthing_nft_rules }}"
 
     # Trigger the automount so the folder dirs below land on the NAS instead of
@@ -167,12 +164,6 @@
         group: "{{ username }}"
         mode: "0644"
 
-    - name: Check stack dir exists
-      ansible.builtin.stat:
-        path: "{{ stack_dir }}"
-      register: stack_dir_stat
-      changed_when: false
-
     # Everything this service reads lives in compose.yaml, so `up` recreates the
     # container on its own and the Recreate containers handler would only repeat
     # the work. `wait` holds until the container healthcheck passes, which is
@@ -185,7 +176,6 @@
         pull: always
         wait: true
         wait_timeout: 120
-      when: stack_dir_stat.stat.exists
 
     - name: Get syncthing system status
       ansible.builtin.uri:
@@ -193,7 +183,6 @@
         headers: "{{ syncthing_api_headers }}"
       register: syncthing_status
       changed_when: false
-      check_mode: false
 
     - name: Show the device ID
       ansible.builtin.debug:
@@ -205,7 +194,6 @@
         headers: "{{ syncthing_api_headers }}"
       register: syncthing_folder_template
       changed_when: false
-      check_mode: false
 
     - name: Get the current folders
       ansible.builtin.uri:
@@ -213,7 +201,6 @@
         headers: "{{ syncthing_api_headers }}"
       register: syncthing_folders_current
       changed_when: false
-      check_mode: false
 
     # PUT replaces the whole folder object, so the body is the current folder
     # with our fields laid over it. A folder that does not exist yet starts
@@ -243,7 +230,6 @@
         headers: "{{ syncthing_api_headers }}"
       register: syncthing_options_current
       changed_when: false
-      check_mode: false
 
     - name: Configure options
       ansible.builtin.uri:
@@ -262,7 +248,6 @@
         headers: "{{ syncthing_api_headers }}"
       register: syncthing_gui_current
       changed_when: false
-      check_mode: false
 
     - name: Configure the GUI
       ansible.builtin.uri:
@@ -285,20 +270,12 @@
         mode: "0644"
       notify: Reload nginx
 
-    - name: Check nginx site exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/nginx/sites-available/syncthing
-      register: syncthing_site
-      changed_when: false
-
     - name: Enable nginx site
       become: true
       ansible.builtin.file:
         src: /etc/nginx/sites-available/syncthing
         dest: /etc/nginx/sites-enabled/syncthing
         state: link
-      when: syncthing_site.stat.exists
       notify: Reload nginx
 
     - name: Check whether syncthing needs a restart
@@ -307,7 +284,6 @@
         headers: "{{ syncthing_api_headers }}"
       register: syncthing_restart_required
       changed_when: false
-      check_mode: false
 
     - name: Restart syncthing for pending config
       community.docker.docker_compose_v2:

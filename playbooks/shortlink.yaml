@@ -74,7 +74,6 @@
         cmd: tailscale ip -4
       register: shortlink_gitea_ssh_ip
       changed_when: false
-      check_mode: false
 
     - name: Configure Gitea SSH host for shortlink
       ansible.builtin.blockinfile:
@@ -96,19 +95,12 @@
         version: main
         force: true
 
-    - name: Check stack dir exists
-      ansible.builtin.stat:
-        path: "{{ stack_dir }}"
-      register: stack_dir_stat
-      changed_when: false
-
     - name: Build and start containers
       community.docker.docker_compose_v2:
         project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         build: always
-      when: stack_dir_stat.stat.exists
 
     - name: Render nginx site
       become: true
@@ -120,20 +112,12 @@
         mode: "0644"
       notify: Reload nginx
 
-    - name: Check nginx site exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/nginx/sites-available/shortlink
-      register: shortlink_site
-      changed_when: false
-
     - name: Enable nginx site
       become: true
       ansible.builtin.file:
         src: /etc/nginx/sites-available/shortlink
         dest: /etc/nginx/sites-enabled/shortlink
         state: link
-      when: shortlink_site.stat.exists
       notify: Reload nginx
 
   handlers:

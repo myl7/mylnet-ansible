@@ -46,19 +46,12 @@
         mode: "0644"
       notify: Recreate containers
 
-    - name: Check stack dir exists
-      ansible.builtin.stat:
-        path: "{{ stack_dir }}"
-      register: stack_dir_stat
-      changed_when: false
-
     - name: Start containers
       community.docker.docker_compose_v2:
         project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: stack_dir_stat.stat.exists
 
     - name: Render gost nginx site
       become: true

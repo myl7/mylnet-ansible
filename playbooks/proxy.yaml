@@ -33,18 +33,11 @@
         mode: "0644"
       notify: Reload nginx
 
-    - name: Check proxy fallback nginx site exists
-      ansible.builtin.stat:
-        path: /etc/nginx/sites-available/proxy-reality
-      register: proxy_reality_fallback_site
-      changed_when: false
-
     - name: Enable proxy fallback nginx site
       ansible.builtin.file:
         src: /etc/nginx/sites-available/proxy-reality
         dest: /etc/nginx/sites-enabled/proxy-reality
         state: link
-      when: proxy_reality_fallback_site.stat.exists
       notify: Reload nginx
 
   handlers:
@@ -104,12 +97,9 @@
       ansible.builtin.script:
         cmd: >-
           {{ playbook_dir }}/../scripts/ensure_nft.py
-          {{ (ansible_check_mode | default(false)) | ternary('--check', '') }}
-          --
           {{ item }}
       register: proxy_nft_apply
       changed_when: "'changed=true' in proxy_nft_apply.stdout_lines"
-      check_mode: false
       loop: "{{ proxy_nft_rules }}"
 
     - name: Create stack dir
@@ -138,19 +128,12 @@
         mode: "0644"
       notify: Recreate containers
 
-    - name: Check stack dir exists
-      ansible.builtin.stat:
-        path: "{{ stack_dir }}"
-      register: stack_dir_stat
-      changed_when: false
-
     - name: Start containers
       community.docker.docker_compose_v2:
         project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
-      when: stack_dir_stat.stat.exists
 
   post_tasks:
     - name: Remove legacy Shadowsocks nftables rules
@@ -267,18 +250,11 @@
         mode: "0644"
       notify: Reload nginx
 
-    - name: Check subscription nginx site exists
-      ansible.builtin.stat:
-        path: /etc/nginx/sites-available/proxy-sub
-      register: proxy_sub_site
-      changed_when: false
-
     - name: Enable subscription nginx site
       ansible.builtin.file:
         src: /etc/nginx/sites-available/proxy-sub
         dest: /etc/nginx/sites-enabled/proxy-sub
         state: link
-      when: proxy_sub_site.stat.exists
       notify: Reload nginx
 
   handlers:

@@ -194,12 +194,6 @@
         group: root
         mode: "0755"
 
-    - name: Check auditd is installed
-      ansible.builtin.stat:
-        path: /usr/sbin/auditd
-      register: auditd_bin
-      changed_when: false
-
     # Some VPS kernels ship without CONFIG_AUDIT, so auditctl and augenrules
     # cannot reach the netlink audit socket. Skip the auditd subsystem there.
     - name: Probe kernel audit support
@@ -208,12 +202,10 @@
       register: audit_probe
       changed_when: false
       failed_when: false
-      check_mode: false
-      when: auditd_bin.stat.exists
 
     - name: Set audit support fact
       ansible.builtin.set_fact:
-        audit_supported: "{{ auditd_bin.stat.exists and (audit_probe.rc | default(1)) == 0 }}"
+        audit_supported: "{{ audit_probe.rc == 0 }}"
 
     # lynis ACCT-9628: Audit security-sensitive file changes
     - name: Install auditd watch rules
@@ -238,7 +230,7 @@
         name: auditd
         enabled: false
         state: stopped
-      when: auditd_bin.stat.exists and not audit_supported
+      when: not audit_supported
 
     - name: Install auditd watch report script
       ansible.builtin.template:
@@ -318,19 +310,12 @@
         day: "1"
         job: /usr/local/sbin/mylnet-pwck-report
 
-    - name: Check sysstat is installed
-      ansible.builtin.stat:
-        path: /etc/default/sysstat
-      register: sysstat_default
-      changed_when: false
-
     # lynis ACCT-9626
     - name: Enable sysstat collection
       ansible.builtin.lineinfile:
         path: /etc/default/sysstat
         regexp: "^ENABLED="
         line: 'ENABLED="true"'
-      when: sysstat_default.stat.exists
 
     # lynis ACCT-9626
     - name: Start and enable sysstat timers
@@ -341,7 +326,6 @@
       loop:
         - sysstat-collect.timer
         - sysstat-summary.timer
-      when: sysstat_default.stat.exists
 
     # lynis KRNL-6000
     - name: Harden kernel and network sysctls

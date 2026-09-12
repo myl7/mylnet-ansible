@@ -85,19 +85,12 @@
         mode: "0644"
       notify: Recreate containers
 
-    - name: Check stack dir exists
-      ansible.builtin.stat:
-        path: "{{ stack_dir }}"
-      register: stack_dir_stat
-      changed_when: false
-
     - name: Build and start containers
       community.docker.docker_compose_v2:
         project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         build: always
-      when: stack_dir_stat.stat.exists
 
     - name: Create htpasswd dir
       become: true
@@ -128,20 +121,12 @@
         mode: "0644"
       notify: Reload nginx
 
-    - name: Check nginx site exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/nginx/sites-available/cityu-print
-      register: cityu_print_site
-      changed_when: false
-
     - name: Enable nginx site
       become: true
       ansible.builtin.file:
         src: /etc/nginx/sites-available/cityu-print
         dest: /etc/nginx/sites-enabled/cityu-print
         state: link
-      when: cityu_print_site.stat.exists
       notify: Reload nginx
 
   handlers:

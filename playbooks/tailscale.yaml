@@ -41,7 +41,6 @@
         return_content: true
       register: tailscale_installer_supported
       changed_when: false
-      check_mode: false
       failed_when: >
         tailscale_installer_supported.status != 200 or
         tailscale_installer_supported.content | trim != 'OK'
@@ -69,25 +68,17 @@
         mode: "0644"
         state: present
 
-    - name: Check Tailscale apt source exists
-      ansible.builtin.stat:
-        path: /etc/apt/sources.list.d/tailscale.sources
-      register: tailscale_apt_source
-      changed_when: false
-
     - name: Install Tailscale
       ansible.builtin.apt:
         name: tailscale
         state: present
         update_cache: true
-      when: tailscale_apt_source.stat.exists
 
     - name: Start and enable Tailscale
       ansible.builtin.systemd_service:
         name: tailscaled
         state: started
         enabled: true
-      when: tailscale_apt_source.stat.exists
 
     - name: Check Tailscale status
       ansible.builtin.command:
@@ -95,8 +86,6 @@
       register: tailscale_status
       changed_when: false
       failed_when: false
-      check_mode: false
-      when: tailscale_apt_source.stat.exists
 
     - name: Set Tailscale status facts
       ansible.builtin.set_fact:
@@ -107,7 +96,6 @@
           {{ (tailscale_status.stdout | from_json)
              if tailscale_status.rc == 0 and (tailscale_status.stdout | trim | length > 0)
              else {} }}
-      when: tailscale_apt_source.stat.exists
 
     - name: Check tailscale_auth_key exists
       ansible.builtin.assert:
@@ -115,9 +103,7 @@
           - tailscale_auth_key | trim | length > 0
         fail_msg: 'Set tailscale_auth_keys["{{ inventory_hostname }}"] in secrets.yaml to a Tailscale auth key'
         quiet: true
-      when:
-        - tailscale_apt_source.stat.exists
-        - not tailscale_logged_in
+      when: not tailscale_logged_in
 
     - name: Authenticate Tailscale with auth key
       ansible.builtin.command:
@@ -129,9 +115,7 @@
           - "--hostname={{ tailscale_machine_name }}"
       register: tailscale_up
       changed_when: true
-      when:
-        - tailscale_apt_source.stat.exists
-        - not tailscale_logged_in
+      when: not tailscale_logged_in
 
     - name: Update Tailscale machine name
       ansible.builtin.command:
@@ -141,6 +125,5 @@
           - "--hostname={{ tailscale_machine_name }}"
       changed_when: true
       when:
-        - tailscale_apt_source.stat.exists
         - tailscale_logged_in
         - tailscale_current_machine_name != tailscale_machine_name

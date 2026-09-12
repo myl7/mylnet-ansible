@@ -5,4 +5,3 @@
     state: present
     remove_orphans: true
     recreate: always
-  when: stack_dir_stat.stat.exists

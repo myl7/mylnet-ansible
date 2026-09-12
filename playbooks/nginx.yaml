@@ -11,12 +11,6 @@
         state: present
         update_cache: true
 
-    - name: Check nginx is installed
-      ansible.builtin.stat:
-        path: /usr/sbin/nginx
-      register: nginx_bin
-      changed_when: false
-
     - name: Copy TLS certs and keys
       ansible.builtin.copy:
         src: secrets/tls/
@@ -25,7 +19,6 @@
         group: root
         mode: "0600"
         directory_mode: "0700"
-      when: nginx_bin.stat.exists
       notify: Reload nginx
 
     - name: Copy nginx.conf
@@ -35,7 +28,6 @@
         owner: root
         group: root
         mode: "0644"
-      when: nginx_bin.stat.exists
       notify: Reload nginx
 
     - name: Create nginx service drop-in dir
@@ -45,7 +37,6 @@
         owner: root
         group: root
         mode: "0755"
-      when: nginx_bin.stat.exists
 
     - name: Copy nginx service hardening drop-in
       ansible.builtin.copy:
@@ -54,7 +45,6 @@
         owner: root
         group: root
         mode: "0644"
-      when: nginx_bin.stat.exists
       notify: Restart nginx
 
     - name: Copy dhparam
@@ -64,7 +54,6 @@
         owner: root
         group: root
         mode: "0644"
-      when: nginx_bin.stat.exists
       notify: Reload nginx
 
     - name: Copy nginx snippets
@@ -74,7 +63,6 @@
         owner: root
         group: root
         mode: "0644"
-      when: nginx_bin.stat.exists
       notify: Reload nginx
 
     - name: Copy ip site
@@ -84,7 +72,6 @@
         owner: root
         group: root
         mode: "0644"
-      when: nginx_bin.stat.exists
       notify: Reload nginx
 
     - name: Enable ip site
@@ -92,14 +79,12 @@
         src: /etc/nginx/sites-available/ip
         dest: /etc/nginx/sites-enabled/ip
         state: link
-      when: nginx_bin.stat.exists
       notify: Reload nginx
 
     - name: Disable default site
       ansible.builtin.file:
         path: /etc/nginx/sites-enabled/default
         state: absent
-      when: nginx_bin.stat.exists
       notify: Reload nginx
 
     - name: Start and enable nginx
@@ -107,7 +92,6 @@
         name: nginx
         state: started
         enabled: true
-      when: nginx_bin.stat.exists
 
   handlers:
     - name: Verify nginx service
@@ -116,7 +100,6 @@
         cmd: systemd-analyze verify nginx.service
       changed_when: false
       listen: Restart nginx
-      when: nginx_bin.stat.exists
 
     - name: Restart nginx
       become: true
@@ -124,7 +107,6 @@
         name: nginx
         state: restarted
         daemon_reload: true
-      when: nginx_bin.stat.exists
 
     - name: Import nginx handlers
       ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
