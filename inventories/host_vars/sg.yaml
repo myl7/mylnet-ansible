@@ -72,3 +72,6 @@ cityu_print_queues:
   - Inno_05
 cityu_print_job_user: cityu-print.myl.moe
 cityu_print_job_origin: cityu-print.myl.moe
+syncthing_domain: sync.myl.moe
+syncthing_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+syncthing_key: /etc/nginx/tls/cloudflare/myl.moe.key

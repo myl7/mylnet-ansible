@@ -1,0 +1,322 @@
+---
+# Syncthing runs as uid 1000 because mount-share.yaml mounts the CIFS share
+# with uid=1000,gid=1000.
+# The GUI listens on loopback and is published by nginx on syncthing_domain.
+# Syncthing does its own authentication, so the vhost carries no auth of its own.
+# Ansible owns the folder settings named in syncthing_folder_defaults and
+# syncthing_folders, the options in syncthing_options, and the GUI credentials.
+# Everything else stays in the GUI: devices, which devices a folder is shared
+# with, and ignore patterns. The config tasks below read the running config and
+# lay only the named fields over it, so nothing else is touched.
+# When the share is unreachable the .stfolder marker goes missing, and Syncthing
+# stops that folder with an error rather than treating it as a mass deletion.
+- name: Deploy syncthing
+  hosts: sg
+
+  vars_files:
+    - secrets/secrets.yaml
+
+  vars:
+    stack_dir: /opt/stacks/syncthing
+    syncthing_data: /srv/syncthing
+    syncthing_share: /srv/share
+    syncthing_gui_address: 127.0.0.1:8384
+    syncthing_api: "http://{{ syncthing_gui_address }}"
+    syncthing_api_headers:
+      X-API-Key: "{{ syncthing_api_key }}"
+    syncthing_sync_port: 22000
+    syncthing_nft_rules:
+      - 'add rule inet filter input_ipv4 tcp dport {{ syncthing_sync_port }} accept comment "ANSIBLE MANAGED RULE"'
+      - 'add rule inet filter input_ipv4 udp dport {{ syncthing_sync_port }} accept comment "ANSIBLE MANAGED RULE"'
+      - 'add rule inet filter input_ipv6 tcp dport {{ syncthing_sync_port }} accept comment "ANSIBLE MANAGED RULE"'
+      - 'add rule inet filter input_ipv6 udp dport {{ syncthing_sync_port }} accept comment "ANSIBLE MANAGED RULE"'
+    syncthing_folder_defaults:
+      type: sendreceive
+      # CIFS does not deliver inotify events for writes made on the NAS side,
+      # so scan on a timer instead of watching. The timer also keeps the share
+      # busy, which defeats the automount idle timeout.
+      fsWatcherEnabled: false
+      rescanIntervalS: 300
+      # CIFS reports the mode from the mount options, not from the file.
+      ignorePerms: true
+      versioning:
+        type: staggered
+        fsType: basic
+        fsPath: ""
+        cleanupIntervalS: 3600
+        params:
+          maxAge: "2592000"
+    # Add a folder by appending an entry here and creating nothing else.
+    # Deleting one takes two steps: remove it in the GUI, then remove it here,
+    # otherwise the next run recreates it.
+    syncthing_folders:
+      - id: obsidian
+        label: Obsidian
+        path: "{{ syncthing_share }}/obsidian"
+    syncthing_gui:
+      user: "{{ username }}"
+      # Syncthing stores a bcrypt hash. It accepts one verbatim and hashes
+      # anything else, so feeding it plaintext would rehash on every run.
+      # Generate with: htpasswd -nbBC 12 x <password> | cut -d: -f2
+      password: "{{ syncthing_gui_password_hash }}"
+      # nginx forwards the real Host header, which Syncthing's DNS rebinding
+      # check rejects by default.
+      insecureSkipHostcheck: true
+    syncthing_options:
+      globalAnnounceEnabled: true
+      # No LAN to announce to on a VPS.
+      localAnnounceEnabled: false
+      # This host is directly reachable on syncthing_sync_port.
+      relaysEnabled: false
+      natEnabled: false
+      listenAddresses:
+        - "tcp://0.0.0.0:{{ syncthing_sync_port }}"
+        - "quic://0.0.0.0:{{ syncthing_sync_port }}"
+
+  pre_tasks:
+    - name: Check syncthing_domain, syncthing_cert, and syncthing_key
+      ansible.builtin.assert:
+        that:
+          - syncthing_domain is defined
+          - syncthing_cert is defined
+          - syncthing_key is defined
+        fail_msg: "Set syncthing_domain, syncthing_cert and syncthing_key"
+        quiet: true
+
+    - name: Check syncthing_api_key and syncthing_gui_password_hash
+      ansible.builtin.assert:
+        that:
+          - syncthing_api_key is defined
+          - syncthing_api_key | trim | length > 0
+          - syncthing_gui_password_hash is defined
+          - syncthing_gui_password_hash is match('^\$2[aby]\$')
+        fail_msg: "Set syncthing_api_key and syncthing_gui_password_hash (a bcrypt hash) in secrets.yaml"
+        quiet: true
+
+  tasks:
+    - name: Install nftables rules
+      become: true
+      ansible.builtin.copy:
+        content: |
+          #!/usr/sbin/nft -f
+
+          {% for syncthing_nft_rule in syncthing_nft_rules %}
+          {{ syncthing_nft_rule }}
+          {% endfor %}
+        dest: /etc/nftables.d/syncthing.nft
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Apply nftables rules
+      become: true
+      ansible.builtin.script:
+        cmd: >-
+          {{ playbook_dir }}/../scripts/ensure_nft.py
+          {{ (ansible_check_mode | default(false)) | ternary('--check', '') }}
+          --
+          {{ item }}
+      register: syncthing_nft_apply
+      changed_when: "'changed=true' in syncthing_nft_apply.stdout_lines"
+      check_mode: false
+      loop: "{{ syncthing_nft_rules }}"
+
+    # Trigger the automount so the folder dirs below land on the NAS instead of
+    # on the directory the share is mounted over.
+    - name: Start share mount
+      become: true
+      ansible.builtin.systemd_service:
+        name: srv-share.mount
+        state: started
+
+    - name: Create syncthing data dir
+      become: true
+      ansible.builtin.file:
+        path: "{{ syncthing_data }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0700"
+
+    # The share mount forces uid=1000, gid=1000 and dir_mode=0777, so these are
+    # the values the kernel reports back for anything under it.
+    - name: Create folder dirs
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0777"
+      loop: "{{ syncthing_folders }}"
+      loop_control:
+        label: "{{ item.id }}"
+
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: syncthing/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+
+    - name: Check stack dir exists
+      ansible.builtin.stat:
+        path: "{{ stack_dir }}"
+      register: stack_dir_stat
+      changed_when: false
+
+    # Everything this service reads lives in compose.yaml, so `up` recreates the
+    # container on its own and the Recreate containers handler would only repeat
+    # the work. `wait` holds until the container healthcheck passes, which is
+    # what the config tasks below need.
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+        wait: true
+        wait_timeout: 120
+      when: stack_dir_stat.stat.exists
+
+    - name: Get syncthing system status
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/system/status"
+        headers: "{{ syncthing_api_headers }}"
+      register: syncthing_status
+      changed_when: false
+      check_mode: false
+
+    - name: Show the device ID
+      ansible.builtin.debug:
+        msg: "Syncthing device ID of {{ inventory_hostname }}: {{ syncthing_status.json.myID }}"
+
+    - name: Get the default folder config
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/config/defaults/folder"
+        headers: "{{ syncthing_api_headers }}"
+      register: syncthing_folder_template
+      changed_when: false
+      check_mode: false
+
+    - name: Get the current folders
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/config/folders"
+        headers: "{{ syncthing_api_headers }}"
+      register: syncthing_folders_current
+      changed_when: false
+      check_mode: false
+
+    # PUT replaces the whole folder object, so the body is the current folder
+    # with our fields laid over it. A folder that does not exist yet starts
+    # from the defaults endpoint instead. Fields we do not name, including the
+    # device list, survive untouched.
+    - name: Configure folders
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/config/folders/{{ item.id }}"
+        method: PUT
+        headers: "{{ syncthing_api_headers }}"
+        body_format: json
+        body: "{{ syncthing_folder_wanted }}"
+      vars:
+        syncthing_folder_current: >-
+          {{ syncthing_folders_current.json | selectattr('id', 'eq', item.id) | first
+             | default(syncthing_folder_template.json) }}
+        syncthing_folder_wanted: >-
+          {{ syncthing_folder_current | combine(syncthing_folder_defaults) | combine(item) }}
+      when: syncthing_folder_wanted != syncthing_folder_current
+      loop: "{{ syncthing_folders }}"
+      loop_control:
+        label: "{{ item.id }}"
+
+    - name: Get the current options
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/config/options"
+        headers: "{{ syncthing_api_headers }}"
+      register: syncthing_options_current
+      changed_when: false
+      check_mode: false
+
+    - name: Configure options
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/config/options"
+        method: PATCH
+        headers: "{{ syncthing_api_headers }}"
+        body_format: json
+        body: "{{ syncthing_options }}"
+      vars:
+        syncthing_options_wanted: "{{ syncthing_options_current.json | combine(syncthing_options) }}"
+      when: syncthing_options_wanted != syncthing_options_current.json
+
+    - name: Get the current GUI config
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/config/gui"
+        headers: "{{ syncthing_api_headers }}"
+      register: syncthing_gui_current
+      changed_when: false
+      check_mode: false
+
+    - name: Configure the GUI
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/config/gui"
+        method: PATCH
+        headers: "{{ syncthing_api_headers }}"
+        body_format: json
+        body: "{{ syncthing_gui }}"
+      vars:
+        syncthing_gui_wanted: "{{ syncthing_gui_current.json | combine(syncthing_gui) }}"
+      when: syncthing_gui_wanted != syncthing_gui_current.json
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: syncthing/syncthing.nginx.j2
+        dest: /etc/nginx/sites-available/syncthing
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Check nginx site exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/syncthing
+      register: syncthing_site
+      changed_when: false
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/syncthing
+        dest: /etc/nginx/sites-enabled/syncthing
+        state: link
+      when: syncthing_site.stat.exists
+      notify: Reload nginx
+
+    - name: Check whether syncthing needs a restart
+      ansible.builtin.uri:
+        url: "{{ syncthing_api }}/rest/config/restart-required"
+        headers: "{{ syncthing_api_headers }}"
+      register: syncthing_restart_required
+      changed_when: false
+      check_mode: false
+
+    - name: Restart syncthing for pending config
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: restarted
+        wait: true
+        wait_timeout: 120
+      when: syncthing_restart_required.json.requiresRestart
+
+  handlers:
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml

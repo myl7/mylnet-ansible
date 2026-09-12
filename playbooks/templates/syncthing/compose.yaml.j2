@@ -1,0 +1,30 @@
+services:
+  syncthing:
+    image: syncthing/syncthing
+    restart: always
+    # Syncthing needs a port reachable from the internet, and the other
+    # containers here that do (frp, proxy) use host networking as well. It is
+    # also what the Syncthing docs recommend. The GUI stays on loopback.
+    network_mode: host
+    environment:
+      # The share is mounted with uid=1000,gid=1000.
+      - PUID=1000
+      - PGID=1000
+      - STGUIADDRESS={{ syncthing_gui_address }}
+      - STGUIAPIKEY={{ syncthing_api_key | replace('$', '$$') }}
+      - STNODEFAULTFOLDER=1
+    volumes:
+      - {{ syncthing_data }}:/var/syncthing
+{% for syncthing_folder in syncthing_folders %}
+      - {{ syncthing_folder.path }}:{{ syncthing_folder.path }}
+{% endfor %}
+    # The image ships this same probe on a 1m interval, which would make
+    # `compose up --wait` take a minute on every run.
+    healthcheck:
+      test: ["CMD", "curl", "-fkLsS", "-m", "2", "{{ syncthing_api }}/rest/noauth/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    logging:
+      driver: local
