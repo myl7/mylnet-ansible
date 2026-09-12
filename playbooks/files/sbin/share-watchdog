@@ -1,15 +1,39 @@
 #!/bin/bash
-# Revive the /srv/share CIFS automount when a backend outage killed it.
+# Keep /srv/share usable across CIFS backend outages.
 #
-# The automount unit dies with 'mount-start-limit-hit' when consumers refire
-# mount.cifs past the mount unit's start rate limit while the SMB host is down.
-# A failed automount no longer arms /srv/share, so the share cannot self-heal
-# even after the host returns. This watchdog re-arms it and nudges a remount.
+# Two separate failure modes are handled here.
+#
+# 1. The automount unit dies with 'mount-start-limit-hit' when consumers refire
+#    mount.cifs past the mount unit's start rate limit while the SMB host is
+#    down. A failed automount no longer arms /srv/share, so the share cannot
+#    self-heal even after the host returns.
+#
+# 2. The server re-exports the share while the client holds the share root as a
+#    cached dir (kernel logs 'Server share ... deleted' and 'close cached dir
+#    rc -78'). That marks the root inode stale for good, while child inodes keep
+#    working, so rclone and the S3 container carry on and only 'ls /srv/share'
+#    fails. Remounting does not help: cifs_match_super hands back the same
+#    superblock whenever the mount options match, stale root included. The
+#    superblock only dies once every reference is gone, and services with a
+#    hardening drop-in or a container bind mount hold one in their own mount
+#    namespace. So clearing this means stopping those consumers first.
 set -uo pipefail
 
 mount_unit=srv-share.mount
 automount_unit=srv-share.automount
 share=/srv/share
+
+# Services that pin the superblock from a private mount namespace.
+consumer_units=(rclone-dav.service)
+# Served straight off the share, so they want a reload once it is back.
+reload_units=(nginx.service)
+
+stamp=/run/mylnet-share-watchdog-last-recovery
+cooldown=1800
+
+log() { echo "mylnet-share-watchdog: $*"; }
+
+probe() { LC_ALL=C timeout 20 ls -1 "$share" 2>&1 >/dev/null; }
 
 # Re-arm when the automount is not active, or when the mount is stuck failed
 # (start-limit-hit). reset-failed on a healthy unit is a harmless no-op.
@@ -21,4 +45,67 @@ fi
 # Poke the mountpoint so the armed automount establishes the mount when the host
 # is reachable. A soft CIFS mount fails fast while it is down; the timeout only
 # guards the pathological case where the call blocks.
-timeout 20 ls -1 "$share" >/dev/null 2>&1 || true
+err=$(probe)
+[ -z "$err" ] && exit 0
+
+# Only a stale root gets the teardown. A host that is merely unreachable returns
+# a connection error instead and recovers on its own once it is back.
+case "$err" in
+  *"Stale file handle"*) ;;
+  *) exit 0 ;;
+esac
+
+now=$(date +%s)
+if [ -f "$stamp" ] && [ $((now - $(cat "$stamp"))) -lt "$cooldown" ]; then
+  log "$share still stale, but the last recovery was under ${cooldown}s ago"
+  exit 0
+fi
+
+log "root inode of $share is stale, rebuilding the CIFS superblock"
+
+# Any container bind-mounting something under the share pins it too. Discover
+# them rather than hardcoding names, so a new stack does not silently break this.
+containers=()
+if command -v docker >/dev/null 2>&1; then
+  while read -r name mounts; do
+    case " $mounts " in
+      *" $share"*) containers+=("${name#/}") ;;
+    esac
+  done < <(docker ps -q | xargs -r docker inspect \
+    --format '{{.Name}}{{range .Mounts}} {{.Source}}{{end}}' 2>/dev/null)
+fi
+
+for unit in "${consumer_units[@]}"; do
+  systemctl stop "$unit" || true
+done
+for container in "${containers[@]}"; do
+  docker stop "$container" >/dev/null || true
+done
+
+systemctl stop "$automount_unit" "$mount_unit" || true
+
+if grep -q ' cifs ' /proc/mounts; then
+  log "a CIFS mount survived the teardown; the stale root will likely persist"
+fi
+
+systemctl start "$automount_unit" || true
+recovered=0
+[ -z "$(probe)" ] && recovered=1
+
+for container in "${containers[@]}"; do
+  docker start "$container" >/dev/null || true
+done
+for unit in "${consumer_units[@]}"; do
+  systemctl start "$unit" || true
+done
+for unit in "${reload_units[@]}"; do
+  systemctl reload "$unit" || true
+done
+
+echo "$now" > "$stamp"
+
+if [ "$recovered" = 1 ]; then
+  log "recovered: $share is readable again"
+else
+  log "remount did not clear the stale root; something still pins the superblock"
+fi

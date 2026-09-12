@@ -1,5 +1,5 @@
 [Unit]
-Description=Revive the /srv/share CIFS automount if it was killed
+Description=Repair the /srv/share CIFS mount after a backend outage
 
 [Service]
 Type=oneshot

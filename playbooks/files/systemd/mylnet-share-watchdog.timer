@@ -1,5 +1,5 @@
 [Unit]
-Description=Periodically revive the /srv/share CIFS automount
+Description=Periodically check and repair the /srv/share CIFS mount
 
 [Timer]
 OnBootSec=2min
