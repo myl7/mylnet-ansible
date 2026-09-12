@@ -1,4 +1,4 @@
-Prefer `restart: always` for disposable Docker containers.
+Use `restart: always` for disposable Docker containers.
 
 # Ansible Preference
 
@@ -16,8 +16,6 @@ For long config files in `copy` tasks, prefer files or templates rather than inl
 Do not add `no_log` or use weird `owner/group/mode` just because a task handles secrets.
 Control and managed node logs are trusted in this project.
 Secrets can appear in them.
-
-Never use `ansible_check_mode` in `when` checks of tasks.
 
 Do not use `run_once: true`.
 
@@ -62,27 +60,3 @@ Do not use broad names and avoid "required".
 Put host-shared local config default and asssertion in `pre_tasks`.
 
 To assign a variable during tasks, because ansible variables are lazily evaluated, just put the assignment in `vars`.
-
-# Commit
-
-Commit messages follow Scoped Commits, https://scopedcommits.com/.
-
-```
-<scope>: <description>
-
-[optional body]
-
-[optional trailer(s)]
-```
-
-The scope is the subsystem the commit touches.
-Here that is normally the playbook or service name, e.g. `cityu-print`, `shortlink`, `cli-proxy-api`.
-`ci`, `dep`, `doc`, `bench`, `build`, and `example` are available for changes that belong to no single service.
-Scope names are singular.
-Never use `feat`, `fix`, or `change` as a scope, because a scope names an area, not a kind of change.
-
-For a commit touching several areas, list the scopes separated by commas, or use `treewide`.
-Reverts and merges can be formatted however you like.
-
-Commits made before this section follow Conventional Commits.
-Leave them as they are.
