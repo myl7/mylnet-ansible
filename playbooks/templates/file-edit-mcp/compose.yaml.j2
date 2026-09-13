@@ -1,9 +1,6 @@
 services:
   file-edit-mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile.prebuilt
-    image: file-edit-mcp:latest
+    image: {{ file_edit_mcp_image }}
     container_name: file-edit-mcp
     restart: always
     # The MCP server has no auth of its own; nginx basic auth fronts it and
@@ -12,15 +9,12 @@ services:
     command:
       ["--transport", "http", "--addr", ":8080", "--allow", "/srv/share/obsidian/notes"]
     volumes:
-      # Bind the automount root, not the vault subtree: only a bind of
-      # /srv/share itself receives the automount's remount events, and a
-      # subtree bind pins the old CIFS instance forever. rslave keeps host
-      # mount/unmount events flowing in without leaking container events out.
-      - type: bind
-        source: /srv/share
-        target: /srv/share
-        bind:
-          propagation: rslave
+      # Subtree bind without propagation: remount events above the subtree do
+      # not reach it (only a bind of /srv/share itself could receive them).
+      # Recovery from a stale CIFS mount is the mylnet-share-watchdog's
+      # stop-and-restart cycle, the same tradeoff as the s3 and syncthing
+      # stacks.
+      - /srv/share/obsidian/notes:/srv/share/obsidian/notes
     ports:
       - "127.0.0.1:{{ file_edit_mcp_local_port }}:8080"
     logging:

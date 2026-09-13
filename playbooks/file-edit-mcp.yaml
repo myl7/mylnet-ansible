@@ -5,12 +5,9 @@
   vars:
     file_edit_mcp_local_port: 50018
     stack_dir: /opt/stacks/file-edit-mcp
-    # The application is its own project (~/app/file-edit-mcp). The deploy
-    # reads the prebuilt linux/amd64 binary out of the checkout next to this
-    # repository; the Go toolchain never runs on sg (1-core/1.9G, building
-    # from source there risks OOM), so only the seconds-fast prebuilt image
-    # build happens on the host.
-    file_edit_mcp_src: "{{ playbook_dir }}/../../file-edit-mcp"
+    # Published from the dev machine to Docker Hub (make release in the
+    # file-edit-mcp checkout); this host only ever pulls.
+    file_edit_mcp_image: myl7/file-edit-mcp:v0.1.0
 
   pre_tasks:
     - name: Check file_edit_mcp_domain, file_edit_mcp_cert, and file_edit_mcp_key
@@ -20,20 +17,6 @@
           - file_edit_mcp_cert is defined
           - file_edit_mcp_key is defined
         fail_msg: "Set file_edit_mcp_domain, file_edit_mcp_cert and file_edit_mcp_key in host_vars/sg.yaml"
-        quiet: true
-
-    - name: Check the prebuilt binary exists
-      ansible.builtin.stat:
-        path: "{{ file_edit_mcp_src }}/dist/file-edit-mcp-linux-amd64"
-      register: file_edit_mcp_binary
-      delegate_to: localhost
-      changed_when: false
-
-    - name: Fail without the prebuilt binary
-      ansible.builtin.assert:
-        that:
-          - file_edit_mcp_binary.stat.exists
-        fail_msg: "Run 'make linux' in the file-edit-mcp checkout, or set file_edit_mcp_src"
         quiet: true
 
     - name: Check the htpasswd file exists
@@ -59,32 +42,6 @@
         group: "{{ username }}"
         mode: "0755"
 
-    - name: Create dist dir
-      ansible.builtin.file:
-        path: "{{ stack_dir }}/dist"
-        state: directory
-        owner: "{{ username }}"
-        group: "{{ username }}"
-        mode: "0755"
-
-    - name: Copy prebuilt binary
-      ansible.builtin.copy:
-        src: "{{ file_edit_mcp_src }}/dist/file-edit-mcp-linux-amd64"
-        dest: "{{ stack_dir }}/dist/file-edit-mcp-linux-amd64"
-        owner: "{{ username }}"
-        group: "{{ username }}"
-        mode: "0644"
-      notify: Recreate containers
-
-    - name: Copy Dockerfile
-      ansible.builtin.copy:
-        src: "{{ file_edit_mcp_src }}/Dockerfile.prebuilt"
-        dest: "{{ stack_dir }}/Dockerfile.prebuilt"
-        owner: "{{ username }}"
-        group: "{{ username }}"
-        mode: "0644"
-      notify: Recreate containers
-
     - name: Render compose file
       ansible.builtin.template:
         src: file-edit-mcp/compose.yaml.j2
@@ -94,12 +51,12 @@
         mode: "0644"
       notify: Recreate containers
 
-    - name: Build and start containers
+    - name: Pull and start containers
       community.docker.docker_compose_v2:
         project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
-        build: always
+        pull: always
 
     - name: Create htpasswd dir
       become: true
