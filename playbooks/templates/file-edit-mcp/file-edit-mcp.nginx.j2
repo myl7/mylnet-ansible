@@ -7,8 +7,11 @@ server {
     ssl_certificate_key {{ file_edit_mcp_key }};
 
     # Basic auth is the only auth layer; the backend has none of its own.
-    auth_basic "file-edit-mcp";
-    auth_basic_user_file /etc/nginx/htpasswd/file-edit-mcp;
+    # Session-cached: one bcrypt verification per credential per 10 minutes,
+    # see snippets/auth-session.conf.
+    set $fe_auth_file file-edit-mcp;
+    include snippets/auth-session.conf;
+    auth_request /_auth;
 
     # read/edit payloads are line-capped, but multi_edit carries whole-file
     # contents; leave generous room.

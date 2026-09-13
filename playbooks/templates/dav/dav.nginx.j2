@@ -6,6 +6,11 @@ server {
     ssl_certificate {{ dav_cert }};
     ssl_certificate_key {{ dav_key }};
 
+    # Session-cached basic auth: one bcrypt verification per credential
+    # per 10 minutes, see snippets/auth-session.conf.
+    set $fe_auth_file dav;
+    include snippets/auth-session.conf;
+
     location /public/ {
         root /srv/share/dav;
         fancyindex on;
@@ -17,16 +22,18 @@ server {
 
         include snippets/rproxy.conf;
 
+        # GET/HEAD stay public; other methods authenticate. auth_request
+        # cannot sit inside limit_except, so it is gated by $fe_public_auth
+        # (see conf.d/auth-session.conf).
+        auth_request $fe_public_auth;
+
         limit_except GET HEAD {
-            auth_basic "dav";
-            auth_basic_user_file /etc/nginx/htpasswd/dav;
             proxy_pass http://127.0.0.1:{{ dav_local_port }};
         }
     }
 
     location / {
-        auth_basic "dav";
-        auth_basic_user_file /etc/nginx/htpasswd/dav;
+        auth_request /_auth;
         proxy_pass http://127.0.0.1:{{ dav_local_port }};
         include snippets/rproxy.conf;
     }

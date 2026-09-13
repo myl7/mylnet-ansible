@@ -65,6 +65,24 @@
         mode: "0644"
       notify: Reload nginx
 
+    - name: Copy nginx conf.d
+      ansible.builtin.copy:
+        src: nginx/conf.d/
+        dest: /etc/nginx/conf.d/
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Create auth session cache dir
+      ansible.builtin.file:
+        path: /var/cache/nginx/auth
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0700"
+      notify: Reload nginx
+
     - name: Copy ip site
       ansible.builtin.copy:
         src: nginx/sites-available/ip
