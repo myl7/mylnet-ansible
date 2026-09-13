@@ -1,0 +1,146 @@
+---
+- name: Deploy file-edit-mcp
+  hosts: sg
+
+  vars:
+    file_edit_mcp_local_port: 50018
+    stack_dir: /opt/stacks/file-edit-mcp
+    # The application is its own project (~/app/file-edit-mcp). The deploy
+    # reads the prebuilt linux/amd64 binary out of the checkout next to this
+    # repository; the Go toolchain never runs on sg (1-core/1.9G, building
+    # from source there risks OOM), so only the seconds-fast prebuilt image
+    # build happens on the host.
+    file_edit_mcp_src: "{{ playbook_dir }}/../../file-edit-mcp"
+
+  pre_tasks:
+    - name: Check file_edit_mcp_domain, file_edit_mcp_cert, and file_edit_mcp_key
+      ansible.builtin.assert:
+        that:
+          - file_edit_mcp_domain is defined
+          - file_edit_mcp_cert is defined
+          - file_edit_mcp_key is defined
+        fail_msg: "Set file_edit_mcp_domain, file_edit_mcp_cert and file_edit_mcp_key in host_vars/sg.yaml"
+        quiet: true
+
+    - name: Check the prebuilt binary exists
+      ansible.builtin.stat:
+        path: "{{ file_edit_mcp_src }}/dist/file-edit-mcp-linux-amd64"
+      register: file_edit_mcp_binary
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Fail without the prebuilt binary
+      ansible.builtin.assert:
+        that:
+          - file_edit_mcp_binary.stat.exists
+        fail_msg: "Run 'make linux' in the file-edit-mcp checkout, or set file_edit_mcp_src"
+        quiet: true
+
+    - name: Check the htpasswd file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/secrets/htpasswd/file-edit-mcp"
+      register: file_edit_mcp_htpasswd
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Fail without an htpasswd file
+      ansible.builtin.assert:
+        that:
+          - file_edit_mcp_htpasswd.stat.exists
+        fail_msg: "Create playbooks/secrets/htpasswd/file-edit-mcp, the site is public without it"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create dist dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/dist"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Copy prebuilt binary
+      ansible.builtin.copy:
+        src: "{{ file_edit_mcp_src }}/dist/file-edit-mcp-linux-amd64"
+        dest: "{{ stack_dir }}/dist/file-edit-mcp-linux-amd64"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Copy Dockerfile
+      ansible.builtin.copy:
+        src: "{{ file_edit_mcp_src }}/Dockerfile.prebuilt"
+        dest: "{{ stack_dir }}/Dockerfile.prebuilt"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: file-edit-mcp/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Build and start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        build: always
+
+    - name: Create htpasswd dir
+      become: true
+      ansible.builtin.file:
+        path: /etc/nginx/htpasswd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Write htpasswd
+      become: true
+      ansible.builtin.copy:
+        src: secrets/htpasswd/file-edit-mcp
+        dest: /etc/nginx/htpasswd/file-edit-mcp
+        owner: root
+        group: www-data
+        mode: "0640"
+      notify: Reload nginx
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: file-edit-mcp/file-edit-mcp.nginx.j2
+        dest: /etc/nginx/sites-available/file-edit-mcp
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/file-edit-mcp
+        dest: /etc/nginx/sites-enabled/file-edit-mcp
+        state: link
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml

@@ -1,0 +1,26 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ file_edit_mcp_domain }};
+
+    ssl_certificate {{ file_edit_mcp_cert }};
+    ssl_certificate_key {{ file_edit_mcp_key }};
+
+    # Basic auth is the only auth layer; the backend has none of its own.
+    auth_basic "file-edit-mcp";
+    auth_basic_user_file /etc/nginx/htpasswd/file-edit-mcp;
+
+    # read/edit payloads are line-capped, but multi_edit carries whole-file
+    # contents; leave generous room.
+    client_max_body_size 32m;
+
+    location / {
+        proxy_pass http://127.0.0.1:{{ file_edit_mcp_local_port }};
+        include snippets/rproxy.conf;
+        # MCP streamable HTTP holds an SSE session stream open for the whole
+        # connection, so no buffering and long timeouts, like cli-proxy-api.
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_buffering off;
+    }
+}
