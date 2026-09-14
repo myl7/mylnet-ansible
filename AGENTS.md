@@ -60,3 +60,12 @@ Do not use broad names and avoid "required".
 Put host-shared local config default and asssertion in `pre_tasks`.
 
 To assign a variable during tasks, because ansible variables are lazily evaluated, just put the assignment in `vars`.
+
+# nginx Basic Auth
+
+htpasswd files for nginx `auth_basic` live in `secrets/htpasswd/<site>` and each site's playbook deploys them to `/etc/nginx/htpasswd/<site>`.
+
+Generate them with bcrypt cost 5: `htpasswd -cBC 5 <path> <user>` to create, `htpasswd -B -C 5 <path> <user>` to update the existing user in place.
+Do not use htpasswd's default MD5 (`$apr1$`), and do not reach for sha512crypt (`$6$`, which htpasswd cannot generate anyway).
+
+The passwords are random 16-char strings (~98 bits of entropy), so brute force is infeasible at any cost; every request re-verifies on a 1-core VPS, where cost 5 takes ~2 ms and cost 12 ~274 ms, making verify latency the binding constraint.
