@@ -7,7 +7,7 @@
     stack_dir: /opt/stacks/file-edit-mcp
     # Published from the dev machine to Docker Hub (make release in the
     # file-edit-mcp checkout); this host only ever pulls.
-    file_edit_mcp_image: myl7/file-edit-mcp:v0.2.3
+    file_edit_mcp_image: myl7/file-edit-mcp:v0.3.0
 
   vars_files:
     - secrets/secrets.yaml
