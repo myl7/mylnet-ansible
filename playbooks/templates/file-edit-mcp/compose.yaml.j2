@@ -3,11 +3,18 @@ services:
     image: {{ file_edit_mcp_image }}
     container_name: file-edit-mcp
     restart: always
-    # The MCP server has no auth of its own; nginx basic auth fronts it and
-    # the port below stays loopback-only. --allow scopes it to the notes
-    # vault, not the whole share.
+    # Token-path auth: the MCP endpoint lives at /<token>/mcp and the server
+    # rejects every other path, so the token env var IS the auth layer. nginx
+    # passes through without basic auth; the port below stays loopback-only.
+    # --allow scopes it to the notes vault, not the whole share.
     command:
       ["--transport", "http", "--addr", ":8080", "--allow", "/srv/share/obsidian/notes"]
+    environment:
+      FILE_EDIT_MCP_TOKEN: "{{ file_edit_mcp_token }}"
+      # v0.2.1+ ships a roots-only default; vault identity and routing are
+      # deployment-specific, so they live here in the private stack, not in
+      # the public server defaults.
+      FILE_EDIT_MCP_INSTRUCTIONS: "This server edits the Obsidian vault notes (the vault name is its folder name), rooted at /srv/share/obsidian/notes. When the user refers to their Obsidian notes, the notes vault, or asks e.g. 写入 obsidian notes, they mean this vault: use these tools on files under that root. Notes are UTF-8 markdown with [[wiki links]] and YAML frontmatter; do not rewrite those unless asked."
     volumes:
       # Subtree bind without propagation: remount events above the subtree do
       # not reach it (only a bind of /srv/share itself could receive them).

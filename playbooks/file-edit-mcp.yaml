@@ -7,7 +7,10 @@
     stack_dir: /opt/stacks/file-edit-mcp
     # Published from the dev machine to Docker Hub (make release in the
     # file-edit-mcp checkout); this host only ever pulls.
-    file_edit_mcp_image: myl7/file-edit-mcp:v0.1.0
+    file_edit_mcp_image: myl7/file-edit-mcp:v0.2.1
+
+  vars_files:
+    - secrets/secrets.yaml
 
   pre_tasks:
     - name: Check file_edit_mcp_domain, file_edit_mcp_cert, and file_edit_mcp_key
@@ -19,18 +22,13 @@
         fail_msg: "Set file_edit_mcp_domain, file_edit_mcp_cert and file_edit_mcp_key in host_vars/sg.yaml"
         quiet: true
 
-    - name: Check the htpasswd file exists
-      ansible.builtin.stat:
-        path: "{{ playbook_dir }}/secrets/htpasswd/file-edit-mcp"
-      register: file_edit_mcp_htpasswd
-      delegate_to: localhost
-      changed_when: false
-
-    - name: Fail without an htpasswd file
+    - name: Check the auth token
       ansible.builtin.assert:
         that:
-          - file_edit_mcp_htpasswd.stat.exists
-        fail_msg: "Create playbooks/secrets/htpasswd/file-edit-mcp, the site is public without it"
+          - file_edit_mcp_token is defined
+          - file_edit_mcp_token | length > 0
+          - file_edit_mcp_token is match('^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')
+        fail_msg: "Set file_edit_mcp_token in secrets/secrets.yaml (URL-segment safe: letters, digits, '-', '_')"
         quiet: true
 
   tasks:
@@ -58,24 +56,11 @@
         remove_orphans: true
         pull: always
 
-    - name: Create htpasswd dir
+    - name: Remove the obsolete basic-auth htpasswd
       become: true
       ansible.builtin.file:
-        path: /etc/nginx/htpasswd
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Write htpasswd
-      become: true
-      ansible.builtin.copy:
-        src: secrets/htpasswd/file-edit-mcp
-        dest: /etc/nginx/htpasswd/file-edit-mcp
-        owner: root
-        group: www-data
-        mode: "0640"
-      notify: Reload nginx
+        path: /etc/nginx/htpasswd/file-edit-mcp
+        state: absent
 
     - name: Render nginx site
       become: true
