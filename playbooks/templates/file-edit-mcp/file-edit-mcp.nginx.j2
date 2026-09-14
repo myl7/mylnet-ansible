@@ -9,7 +9,7 @@ server {
     # Basic auth is the only auth layer; the backend has none of its own.
     # Session-cached: one bcrypt verification per credential per 10 minutes,
     # see snippets/auth-session.conf.
-    set $fe_auth_file file-edit-mcp;
+    set $auth_file file-edit-mcp;
     include snippets/auth-session.conf;
     auth_request /_auth;
 

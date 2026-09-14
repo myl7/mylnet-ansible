@@ -11,7 +11,7 @@ server {
 
     # Session-cached basic auth: one bcrypt verification per credential
     # per 10 minutes, see snippets/auth-session.conf.
-    set $fe_auth_file cityu-print;
+    set $auth_file cityu-print;
     include snippets/auth-session.conf;
 
     location / {
