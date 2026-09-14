@@ -8,7 +8,7 @@ server {
 
     # Session-cached basic auth: one bcrypt verification per credential
     # per 10 minutes, see snippets/auth-session.conf.
-    set $auth_file dav;
+    set $basic_auth_file dav;
     include snippets/auth-session.conf;
 
     location /public/ {
