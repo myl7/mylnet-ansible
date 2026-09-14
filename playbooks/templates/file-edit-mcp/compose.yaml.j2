@@ -11,9 +11,10 @@ services:
       ["--transport", "http", "--addr", ":8080", "--allow", "/srv/share/obsidian/notes"]
     environment:
       FILE_EDIT_MCP_TOKEN: "{{ file_edit_mcp_token }}"
-      # v0.2.1+ ships a roots-only default; vault identity and routing are
-      # deployment-specific, so they live here in the private stack, not in
-      # the public server defaults.
+      # Single token today; the server (v0.4.0+) also accepts
+      # FILE_EDIT_MCP_TOKENS="a,b,..." for per-client session isolation —
+      # switch to a list in secrets.yaml when a second client needs its own
+      # marker set.
       FILE_EDIT_MCP_INSTRUCTIONS: "This server edits the Obsidian vault notes (the vault name is its folder name), rooted at /srv/share/obsidian/notes. When the user refers to their Obsidian notes, the notes vault, or asks e.g. 写入 obsidian notes, they mean this vault: use these tools on files under that root. Notes are UTF-8 markdown with [[wiki links]] and YAML frontmatter; do not rewrite those unless asked."
     volumes:
       # Subtree bind without propagation: remount events above the subtree do
