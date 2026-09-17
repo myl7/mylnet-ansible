@@ -19,7 +19,7 @@
           - file_edit_mcp_domain is defined
           - file_edit_mcp_cert is defined
           - file_edit_mcp_key is defined
-        fail_msg: "Set file_edit_mcp_domain, file_edit_mcp_cert and file_edit_mcp_key in host_vars/sg.yaml"
+        fail_msg: "Set file_edit_mcp_domain, file_edit_mcp_cert and file_edit_mcp_key in host_vars/sg1.yaml"
         quiet: true
 
     - name: Check the auth token

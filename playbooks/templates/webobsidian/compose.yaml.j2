@@ -1,8 +1,7 @@
 services:
   webobsidian:
-    # Pulled from Docker Hub; the playbook never builds (sg is 1-core/1.9 GiB,
-    # and control-node builds are unbundled from this repo — see the playbook
-    # header for the one-time publish procedure).
+    # Pulled from Docker Hub; the playbook never builds (the image is built and
+    # published outside this repo, and the playbook header has the procedure).
     image: {{ webobsidian_image }}
     container_name: webobsidian
     restart: always

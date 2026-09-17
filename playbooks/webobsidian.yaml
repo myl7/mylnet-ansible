@@ -8,7 +8,7 @@
 # c41967a) with its Dockerfile untouched, then pushed. To bump the version:
 # build the new upstream tag the same way (docker buildx build --platform
 # linux/amd64 --load -t myl7/webobsidian:<tag> .; docker push), then update
-# webobsidian_image here. Building must happen off sg (1 core/1.9 GiB) and is
+# webobsidian_image here. Building happens on the dev machine, not here, and is
 # no longer this playbook's business.
 #
 # Exposure is twofold: directly on the Tailscale IP (queried below) and through
@@ -42,7 +42,7 @@
           - webobsidian_domain is defined
           - webobsidian_cert is defined
           - webobsidian_key is defined
-        fail_msg: "Set webobsidian_domain, webobsidian_cert and webobsidian_key in host_vars/sg.yaml"
+        fail_msg: "Set webobsidian_domain, webobsidian_cert and webobsidian_key in host_vars/sg1.yaml"
         quiet: true
 
   tasks:
