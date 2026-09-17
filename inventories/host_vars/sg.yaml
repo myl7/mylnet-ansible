@@ -2,24 +2,12 @@
 # /etc/.setip_config_hash: the VPS provider's setip.sh (configuring networking for the VPS) stores a config hash to skip reruns
 rkhunter_allowed_hidden_files:
   - /etc/.setip_config_hash
-vaultwarden_domain: key.myl.moe
-vaultwarden_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-vaultwarden_key: /etc/nginx/tls/cloudflare/myl.moe.key
-miniflux_domain: read.myl.moe
-miniflux_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-miniflux_key: /etc/nginx/tls/cloudflare/myl.moe.key
-uptime_domain: uptime.myl.moe
-uptime_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-uptime_key: /etc/nginx/tls/cloudflare/myl.moe.key
 s3_domain: s3.myl.moe
 s3_console_domain: s3-console.myl.moe
 s3_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 s3_key: /etc/nginx/tls/cloudflare/myl.moe.key
 s3_console_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 s3_console_key: /etc/nginx/tls/cloudflare/myl.moe.key
-mc_auth_domain: mcauth.myl.moe
-mc_auth_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-mc_auth_key: /etc/nginx/tls/cloudflare/myl.moe.key
 shortlink_domain: my6.co
 shortlink_cert: /etc/nginx/tls/cloudflare/my6.co.pem
 shortlink_key: /etc/nginx/tls/cloudflare/my6.co.key

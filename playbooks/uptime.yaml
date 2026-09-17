@@ -1,6 +1,6 @@
 ---
 - name: Deploy uptime
-  hosts: sg
+  hosts: sg1
 
   vars:
     uptime_local_port: 50005
