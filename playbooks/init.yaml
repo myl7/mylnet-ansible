@@ -12,16 +12,25 @@
     # memory scale on their own.
     zram_percent: 50
     swap_file_size: 1G
+    # One wall clock across the fleet. Cron jobs in the repo are written in
+    # local time, log timestamps are local, and containers mounting
+    # /etc/localtime inherit it.
+    timezone: Asia/Hong_Kong
 
   vars_files:
     - secrets/secrets.yaml
 
   pre_tasks:
-    - name: Check password_hash
+    # One password per host per account. The key is the short host name because
+    # bwh and bwh.raw are one machine under two inventory names in this play.
+    - name: Check password hashes
       ansible.builtin.assert:
         that:
-          - password_hash is defined
-        fail_msg: "Set password_hash in secrets.yaml"
+          - root_password_hashes is defined
+          - user_password_hashes is defined
+          - root_password_hashes[inventory_hostname_short] | default('') is match('^\$6\$')
+          - user_password_hashes[inventory_hostname_short] | default('') is match('^\$6\$')
+        fail_msg: "Set root_password_hashes and user_password_hashes (a sha512-crypt hash per host) for {{ inventory_hostname_short }} in secrets.yaml"
         quiet: true
 
   tasks:
@@ -166,6 +175,18 @@
         regexp: '^(127\.0\.1\.1|{{ ansible_host | regex_escape }})\s+'
         line: "{{ ansible_host }} {{ inventory_hostname_short }}"
 
+    - name: Read the timezone
+      ansible.builtin.command:
+        cmd: timedatectl show --property=Timezone --value
+      register: timezone_current
+      changed_when: false
+
+    - name: Set the timezone
+      ansible.builtin.command:
+        cmd: timedatectl set-timezone {{ timezone }}
+      when: timezone_current.stdout | trim != timezone
+      changed_when: true
+
     - name: Update SSH config
       ansible.builtin.blockinfile:
         path: /etc/ssh/sshd_config
@@ -225,6 +246,11 @@
         validate: /usr/sbin/nft --check --file %s
       register: nftables_config
 
+    - name: Set the root password
+      ansible.builtin.user:
+        name: root
+        password: "{{ root_password_hashes[inventory_hostname_short] }}"
+
     - name: Add user
       ansible.builtin.user:
         name: "{{ username }}"
@@ -233,8 +259,7 @@
         create_home: true
         groups: sudo
         append: true
-        password: "{{ password_hash }}"
-        update_password: on_create
+        password: "{{ user_password_hashes[inventory_hostname_short] }}"
 
     - name: Check user exists
       ansible.builtin.getent:

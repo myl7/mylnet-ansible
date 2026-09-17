@@ -43,17 +43,17 @@ Examples:
 ```
 
 ```yaml
-# Assert that password_hash exists.
-- name: Check password_hash exists
+# Assert that root_password_hashes exists.
+- name: Check root_password_hashes exists
   ansible.builtin.assert:
     that:
-      - password_hash is defined
-    fail_msg: "Set password_hash in secrets.yaml"
+      - root_password_hashes is defined
+    fail_msg: "Set root_password_hashes in secrets.yaml"
 ```
 
 Merge these `set_fact` tasks when variables are all assigned default values.
 
-Name these `assert` tasks with the asserted variable names or a clear category as the suffix, e.g., `Check password_hash` or `Check SSH config`.
+Name these `assert` tasks with the asserted variable names or a clear category as the suffix, e.g., `Check root_password_hashes` or `Check SSH config`.
 Do not use broad names and avoid "required".
 `fail_log` of the `assert` tasks should point out the file to configure the variables unless configured as host/group variables.
 
