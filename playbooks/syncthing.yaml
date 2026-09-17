@@ -11,7 +11,7 @@
 # When the share is unreachable the .stfolder marker goes missing, and Syncthing
 # stops that folder with an error rather than treating it as a mass deletion.
 - name: Deploy syncthing
-  hosts: sg
+  hosts: sg1
 
   vars_files:
     - secrets/secrets.yaml

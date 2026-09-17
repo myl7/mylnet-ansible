@@ -1,6 +1,6 @@
 ---
 - name: Deploy osu-taste
-  hosts: sg
+  hosts: sg1
 
   vars_files:
     - secrets/secrets.yaml

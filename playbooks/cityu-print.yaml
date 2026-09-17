@@ -1,6 +1,6 @@
 ---
 - name: Deploy cityu-print
-  hosts: sg
+  hosts: sg1
 
   vars:
     cityu_print_local_port: 50016

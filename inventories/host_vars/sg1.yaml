@@ -10,9 +10,49 @@ gitea_key: /etc/nginx/tls/cloudflare/myl.moe.key
 rsshub_domain: rss.myl.moe
 rsshub_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 rsshub_key: /etc/nginx/tls/cloudflare/myl.moe.key
+dav_domain: dav.myl.moe
+dav_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+dav_key: /etc/nginx/tls/cloudflare/myl.moe.key
+gost_domain: tun.myl.moe
+gost_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+gost_key: /etc/nginx/tls/cloudflare/myl.moe.key
 prules_domain: prules.myl.moe
 prules_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 prules_key: /etc/nginx/tls/cloudflare/myl.moe.key
+osu_taste_domain: osu.myl.moe
+osu_taste_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+osu_taste_key: /etc/nginx/tls/cloudflare/myl.moe.key
 cliproxy_domain: ai.myl.moe
 cliproxy_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 cliproxy_key: /etc/nginx/tls/cloudflare/myl.moe.key
+cityu_print_domain: cityu-print.myl.moe
+cityu_print_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+cityu_print_key: /etc/nginx/tls/cloudflare/myl.moe.key
+cityu_print_socks_host: 100.69.54.3
+cityu_print_socks_port: 10800
+cityu_print_server: 144.214.36.203
+cityu_print_queue: g7352
+cityu_print_queues:
+  - g7352
+  - G7356
+  - G7751
+  - G7C
+  - Y6407
+  - Y7714
+  - MMW2462
+  - Inno_01
+  - Inno_02
+  - inno_03
+  - Inno_04
+  - Inno_05
+cityu_print_job_user: cityu-print.myl.moe
+cityu_print_job_origin: cityu-print.myl.moe
+syncthing_domain: sync.myl.moe
+syncthing_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+syncthing_key: /etc/nginx/tls/cloudflare/myl.moe.key
+file_edit_mcp_domain: edit-notes.myl.moe
+file_edit_mcp_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+file_edit_mcp_key: /etc/nginx/tls/cloudflare/myl.moe.key
+webobsidian_domain: note.myl.moe
+webobsidian_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+webobsidian_key: /etc/nginx/tls/cloudflare/myl.moe.key

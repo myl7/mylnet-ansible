@@ -20,7 +20,7 @@
 # the container polls, and it runs as uid 1000 to match the mount's uid=1000.
 # Footprint in the trial was ~45 MiB.
 - name: Deploy webobsidian
-  hosts: sg
+  hosts: sg1
 
   vars:
     stack_dir: /opt/stacks/webobsidian

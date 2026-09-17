@@ -1,6 +1,6 @@
 ---
 - name: Deploy file-edit-mcp
-  hosts: sg
+  hosts: sg1
 
   vars:
     file_edit_mcp_local_port: 50018
