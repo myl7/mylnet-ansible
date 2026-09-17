@@ -1,0 +1,46 @@
+services:
+  webobsidian:
+    # Pulled from Docker Hub; the playbook never builds (sg is 1-core/1.9 GiB,
+    # and control-node builds are unbundled from this repo — see the playbook
+    # header for the one-time publish procedure).
+    image: {{ webobsidian_image }}
+    container_name: webobsidian
+    restart: always
+    # uid 1000 matches the uid=1000 CIFS mount options of the vault.
+    user: 1000:1000
+    ports:
+      # nginx upstream for the public vhost.
+      - 127.0.0.1:{{ webobsidian_port }}:8787
+      # Direct reach on the Tailscale network, queried by the playbook.
+      - {{ webobsidian_bind }}:{{ webobsidian_port }}:8787
+    environment:
+      # First login with upstream's default password (123456) prompts to set a
+      # real one, which is stored in data/settings.json. WEBOBSIDIAN_PASSWORD
+      # would only act as an extra override/recovery password, so it stays unset.
+      # CIFS mounts do not propagate inotify events.
+      WEBOBSIDIAN_WATCH: polling
+      # Honoured for the nginx path (X-Forwarded-Proto keeps Secure cookies
+      # working). The login limiter keys on the real socket, so the direct
+      # Tailscale path is not weakened by trusting the header.
+      TRUST_PROXY: "true"
+      # Vault opened on first run; ALLOWED_ROOTS gates the folder browser,
+      # so any sibling vault under /vault is switchable in the UI.
+      VAULT_PATH: /vault/{{ webobsidian_default_vault }}
+      DATA_DIR: /data
+      ALLOWED_ROOTS: /vault
+      NODE_ENV: production
+    volumes:
+      - {{ webobsidian_vault }}:/vault
+      # Bind mount instead of a named volume so teardown stays one rm -rf.
+      - {{ stack_dir }}/data:/data
+    healthcheck:
+      # 127.0.0.1, not localhost: the app listens on IPv4 only and busybox
+      # wget resolves localhost to ::1 first.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8787/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # First boot indexes the whole vault before the health endpoint answers.
+      start_period: 90s
+    logging:
+      driver: local

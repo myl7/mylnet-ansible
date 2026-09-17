@@ -1,0 +1,124 @@
+---
+# Web Obsidian (xnohat/webobsidian) serves the Obsidian vault over the web.
+# Restored from the trial deployment of 2026-09-13, which ran upstream tag
+# v0.1.1 as a bare docker compose stack and was torn down the same day.
+#
+# The image is myl7/webobsidian:v0.1.1 on Docker Hub: upstream publishes no
+# image, so it was built once on the dev machine from tag v0.1.1 (commit
+# c41967a) with its Dockerfile untouched, then pushed. To bump the version:
+# build the new upstream tag the same way (docker buildx build --platform
+# linux/amd64 --load -t myl7/webobsidian:<tag> .; docker push), then update
+# webobsidian_image here. Building must happen off sg (1 core/1.9 GiB) and is
+# no longer this playbook's business.
+#
+# Exposure is twofold: directly on the Tailscale IP (queried below) and through
+# the nginx vhost on webobsidian_domain, which is why the container publishes
+# its port on both addresses. The app authenticates with its own master
+# password (first login with the default 123456 prompts to set a real one,
+# stored in data/settings.json), so the vhost carries no auth of its own. The
+# vault sits on the CIFS automount, which never delivers inotify events, so
+# the container polls, and it runs as uid 1000 to match the mount's uid=1000.
+# Footprint in the trial was ~45 MiB.
+- name: Deploy webobsidian
+  hosts: sg
+
+  vars:
+    stack_dir: /opt/stacks/webobsidian
+    webobsidian_image: myl7/webobsidian:v0.1.1
+    # The mount is the obsidian dir so every vault under it is reachable;
+    # ALLOWED_ROOTS=/vault then lets the UI browse and switch between them.
+    webobsidian_vault: /srv/share/obsidian
+    # The vault opened on first run; afterwards the choice lives in
+    # data/settings.json.
+    webobsidian_default_vault: notes
+    webobsidian_port: 50017
+    # The direct-exposure bind address is the Tailscale IPv4 queried below.
+    webobsidian_bind: "{{ webobsidian_tailscale_ip.stdout | trim }}"
+
+  pre_tasks:
+    - name: Check webobsidian_domain, webobsidian_cert, and webobsidian_key
+      ansible.builtin.assert:
+        that:
+          - webobsidian_domain is defined
+          - webobsidian_cert is defined
+          - webobsidian_key is defined
+        fail_msg: "Set webobsidian_domain, webobsidian_cert and webobsidian_key in host_vars/sg.yaml"
+        quiet: true
+
+  tasks:
+    # Trigger the automount so the bind-mounted vault is the NAS share, not the
+    # directory it mounts over.
+    - name: Start share mount
+      become: true
+      ansible.builtin.systemd_service:
+        name: srv-share.mount
+        state: started
+
+    - name: Get Tailscale IPv4
+      become: true
+      ansible.builtin.command:
+        cmd: tailscale ip -4
+      register: webobsidian_tailscale_ip
+      changed_when: false
+
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    # Holds data/settings.json with the password hash set inside the UI.
+    - name: Create data dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}/data"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0700"
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: webobsidian/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    # `wait` holds until the healthcheck passes, which includes the first-boot
+    # vault index.
+    - name: Pull and start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+        wait: true
+        wait_timeout: 300
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: webobsidian/webobsidian.nginx.j2
+        dest: /etc/nginx/sites-available/webobsidian
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/webobsidian
+        dest: /etc/nginx/sites-enabled/webobsidian
+        state: link
+      notify: Reload nginx
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml

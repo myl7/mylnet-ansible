@@ -78,3 +78,6 @@ syncthing_key: /etc/nginx/tls/cloudflare/myl.moe.key
 file_edit_mcp_domain: edit-notes.myl.moe
 file_edit_mcp_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 file_edit_mcp_key: /etc/nginx/tls/cloudflare/myl.moe.key
+webobsidian_domain: note.myl.moe
+webobsidian_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+webobsidian_key: /etc/nginx/tls/cloudflare/myl.moe.key
