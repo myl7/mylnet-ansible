@@ -1,0 +1,30 @@
+services:
+  - name: tailscale-http-proxy
+    addr: ":{{ gost_client_port }}"
+    handler:
+      type: http
+      chain: relay
+    listener:
+      type: tcp
+
+chains:
+  - name: relay
+    hops:
+      - name: server
+        nodes:
+          - name: server
+            addr: {{ (gost_server.host ~ ':' ~ gost_server.port) | to_json }}
+            connector:
+              type: relay
+              auth:
+                username: {{ gost_username | to_json }}
+                password: {{ gost_password | to_json }}
+            dialer:
+              type: wss
+              tls:
+                caFile: /etc/gost/{{ gost_client_cert }}
+                secure: true
+                serverName: {{ gost_server.name | to_json }}
+              metadata:
+                host: {{ gost_server.name | to_json }}
+                path: {{ ('/' ~ gost_path) | to_json }}

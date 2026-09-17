@@ -1,0 +1,130 @@
+---
+# The gost relay client on cu, the far end of playbooks/gost.yaml.
+#
+# cu is a CityU workstation that never ran init.yaml. It already has Docker, the
+# tailnet, curl and python3, and this playbook installs none of them. It expects
+# nothing else this repo deploys either: no nginx, no /etc/nftables.d, an empty
+# /srv. Its /opt/stacks/gost was built by hand and is root-owned, so this play
+# runs with become instead of the username ownership the other stacks use.
+#
+# Ansible reaches cu over the tailnet, the path the tunnel exists to work around,
+# so this playbook cannot be run at the moment the tunnel is most needed.
+#
+# The client dials the server's public IP with the TLS server name set to
+# tun.myl.moe, a name that deliberately has no DNS record, so nginx picks the
+# vhost by SNI. The address is therefore the only thing that has to change when
+# the server moves, and it now comes from sg1's inventory entry.
+#
+# Four values have to agree with playbooks/gost.yaml. Three of them are read from
+# one source instead of being copied, so only the credentials still live in two
+# places:
+#
+#   server address   hostvars['sg1'].ansible_host
+#   TLS server name  hostvars['sg1'].gost_domain, the nginx server_name
+#   secret path      gost_path, the nginx location
+#   credentials      gost_username and gost_password
+#
+# The certificate is a Cloudflare origin certificate, which is not publicly
+# trusted, so the client keeps a copy to point caFile at. That copy comes from
+# the secrets repo, so reissuing the certificate means re-running this playbook.
+- name: Deploy the gost relay client
+  hosts: cu
+  become: true
+
+  vars_files:
+    - secrets/secrets.yaml
+
+  vars:
+    gost_client_port: 10801
+    gost_client_cert: "{{ hostvars['sg1'].gost_cert | basename }}"
+    gost_server:
+      host: "{{ hostvars['sg1'].ansible_host }}"
+      port: 443
+      name: "{{ hostvars['sg1'].gost_domain }}"
+    stack_dir: /opt/stacks/gost
+
+  pre_tasks:
+    - name: Check gost_username, gost_password, and gost_path
+      ansible.builtin.assert:
+        that:
+          - gost_username is defined
+          - gost_password is defined
+          - gost_path is defined
+        fail_msg: "Set gost_username, gost_password and gost_path in secrets.yaml"
+        quiet: true
+
+    - name: Check gost_domain and gost_cert on sg1
+      ansible.builtin.assert:
+        that:
+          - hostvars['sg1'].gost_domain is defined
+          - hostvars['sg1'].gost_cert is defined
+        fail_msg: "Set gost_domain and gost_cert in inventories/host_vars/sg1.yaml"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy the server certificate
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/secrets/tls/cloudflare/{{ gost_client_cert }}"
+        dest: "{{ stack_dir }}/{{ gost_client_cert }}"
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Recreate containers
+
+    - name: Render gost config
+      ansible.builtin.template:
+        src: gost-client/gost.yaml.j2
+        dest: "{{ stack_dir }}/gost.yaml"
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Recreate containers
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: gost-client/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+
+    # Compose recreates a container when the compose file changes, not when a
+    # file the container mounts changes, so a rewritten gost.yaml or certificate
+    # only takes effect through the handler. Flush it here so the check below
+    # tests the config this run wrote.
+    - name: Apply pending config changes
+      ansible.builtin.meta: flush_handlers
+
+    # The proxy in the environment is what makes this a check of the tunnel
+    # rather than of cu's own path out. A tunnel carries the request to the
+    # server and the response back, so any complete response proves the whole
+    # chain, and a failure means the two ends disagree about an address, a path,
+    # a name, or a credential. The GET runs under --check as well.
+    - name: Check the tunnel
+      ansible.builtin.uri:
+        url: https://pkgs.tailscale.com/
+        timeout: 20
+      environment:
+        https_proxy: "http://127.0.0.1:{{ gost_client_port }}"
+      changed_when: false
+      check_mode: false
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
