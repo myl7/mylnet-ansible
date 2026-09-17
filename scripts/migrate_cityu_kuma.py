@@ -91,18 +91,16 @@ def check_target_guards(conn):
 
 
 def plan_summary(src, dst_seq):
-    cols, monitors = src["monitor"]
+    _cols, monitors = src["monitor"]
     _, groups = src["group"]
     _, monitor_group = src["monitor_group"]
     _, status_pages = src["status_page"]
     _, heartbeats = src["heartbeat"]
     lines = [
-        f"source monitors: {len(monitors)} -> target ids "
-        f"{[m['id'] + MONITOR_OFFSET for m in monitors]}",
+        f"source monitors: {len(monitors)} -> target ids {[m['id'] + MONITOR_OFFSET for m in monitors]}",
         f"source groups: {len(groups)} (target has none)",
         f"source monitor_group rows: {len(monitor_group)}",
-        f"source status pages: {len(status_pages)} "
-        f"slug={status_pages[0]['slug'] if status_pages else None}",
+        f"source status pages: {len(status_pages)} slug={status_pages[0]['slug'] if status_pages else None}",
         f"source heartbeats: {len(heartbeats)} (target has {dst_seq.get('heartbeat', 0)})",
         f"group renames: {GROUP_RENAME}",
     ]
