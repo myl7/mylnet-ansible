@@ -5,6 +5,7 @@ ansible_port = 50000
 [hosts.hosts]
 sg = { ansible_host = "38.54.16.65" }
 bwh = { ansible_host = "104.243.29.231" }
+sg1 = { ansible_host = "167.104.101.86" }
 
 [web.hosts]
 sg = {}
@@ -14,7 +15,7 @@ sg = {}
 bwh = {}
 
 [raw]
-children = ["lightnode", "bandwagon"]
+children = ["lightnode", "bandwagon", "hosthatch"]
 
 [raw.vars]
 ansible_ssh_common_args = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -33,3 +34,10 @@ ansible_port = 50000
 
 [bandwagon.hosts]
 "bwh.raw" = { ansible_host = "104.243.29.231" }
+
+[hosthatch.vars]
+ansible_user = "root"
+ansible_port = 22
+
+[hosthatch.hosts]
+"sg1.raw" = { ansible_host = "167.104.101.86" }
