@@ -1,6 +1,6 @@
 ---
 - name: Deploy gitea
-  hosts: sg
+  hosts: sg1
 
   vars:
     gitea_local_port: 50001

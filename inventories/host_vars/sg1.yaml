@@ -1,4 +1,7 @@
 ---
+gitea_domain: git.myl.moe
+gitea_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+gitea_key: /etc/nginx/tls/cloudflare/myl.moe.key
 rsshub_domain: rss.myl.moe
 rsshub_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 rsshub_key: /etc/nginx/tls/cloudflare/myl.moe.key
