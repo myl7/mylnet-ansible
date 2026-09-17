@@ -16,9 +16,6 @@ gitea_key: /etc/nginx/tls/cloudflare/myl.moe.key
 miniflux_domain: read.myl.moe
 miniflux_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 miniflux_key: /etc/nginx/tls/cloudflare/myl.moe.key
-rsshub_domain: rss.myl.moe
-rsshub_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-rsshub_key: /etc/nginx/tls/cloudflare/myl.moe.key
 dav_domain: dav.myl.moe
 dav_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 dav_key: /etc/nginx/tls/cloudflare/myl.moe.key
@@ -47,9 +44,6 @@ shortlink_links_repo: git@100.97.128.26:myl7/sl.git
 osu_taste_domain: osu.myl.moe
 osu_taste_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 osu_taste_key: /etc/nginx/tls/cloudflare/myl.moe.key
-cliproxy_domain: ai.myl.moe
-cliproxy_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-cliproxy_key: /etc/nginx/tls/cloudflare/myl.moe.key
 cityu_print_domain: cityu-print.myl.moe
 cityu_print_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 cityu_print_key: /etc/nginx/tls/cloudflare/myl.moe.key

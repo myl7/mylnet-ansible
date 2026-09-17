@@ -9,6 +9,7 @@ sg1 = { ansible_host = "167.104.101.86" }
 
 [web.hosts]
 sg = {}
+sg1 = {}
 
 [proxy.hosts]
 sg = {}

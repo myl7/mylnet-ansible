@@ -1,0 +1,7 @@
+---
+rsshub_domain: rss.myl.moe
+rsshub_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+rsshub_key: /etc/nginx/tls/cloudflare/myl.moe.key
+cliproxy_domain: ai.myl.moe
+cliproxy_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+cliproxy_key: /etc/nginx/tls/cloudflare/myl.moe.key

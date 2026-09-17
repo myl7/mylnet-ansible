@@ -1,6 +1,6 @@
 ---
 - name: Deploy CLI Proxy API
-  hosts: sg
+  hosts: sg1
 
   vars_files:
     - secrets/secrets.yaml
@@ -24,7 +24,7 @@
           - cliproxy_domain is defined
           - cliproxy_cert is defined
           - cliproxy_key is defined
-        fail_msg: "Set cliproxy_domain, cliproxy_cert and cliproxy_key in host_vars/sg.yaml"
+        fail_msg: "Set cliproxy_domain, cliproxy_cert and cliproxy_key in host_vars/sg1.yaml"
         quiet: true
 
     - name: Check cliproxy_api_key and cliproxy_management_key
