@@ -12,8 +12,8 @@ services:
       - MYLNET_ANSIBLE_DIR=/srv/mylnet/mylnet-ansible
       - MYLNET_SECRETS_DIR=/srv/mylnet/mylnet-ansible-secrets
       - MYLNET_VERIFY_URL=https://{{ proxy_sub_domain }}/{{ proxy_sub_id }}
-      # The container manages the sg host through its own public address. Its
-      # ssh known_hosts is empty, so the strict checks would block the first run.
+      # The container manages the sg1 host through its own address. Its ssh
+      # known_hosts is empty, so the strict checks would block the first run.
       - ANSIBLE_SSH_ARGS=-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
       - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
     volumes:
@@ -21,7 +21,7 @@ services:
       - /srv/mylnet/mylnet-ansible-secrets:/srv/mylnet/mylnet-ansible-secrets
       # Apply backups live on the host so they survive container recreation.
       - ./backups:/var/lib/mylnet-proxy-rules
-      # The keypair for the container's ssh to myl@sg lives here, generated on
+      # The keypair for the container's ssh to myl@sg1 lives here, generated on
       # this host, public half in myl's authorized_keys. Read-only is enough:
       # ssh only reads the private key.
       - /srv/mylnet/.ssh:/home/app/.ssh:ro

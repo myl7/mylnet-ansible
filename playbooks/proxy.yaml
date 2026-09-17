@@ -1,6 +1,6 @@
 ---
 - name: Prepare proxy REALITY fallback
-  hosts: sg
+  hosts: sg1
   become: true
 
   vars:
@@ -156,7 +156,7 @@
       ansible.builtin.import_tasks: tasks/docker_handlers.yaml
 
 - name: Serve proxy subscription
-  hosts: sg
+  hosts: sg1
   become: true
 
   vars_files:

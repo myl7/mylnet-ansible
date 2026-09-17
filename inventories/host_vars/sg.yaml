@@ -2,11 +2,6 @@
 # /etc/.setip_config_hash: the VPS provider's setip.sh (configuring networking for the VPS) stores a config hash to skip reruns
 rkhunter_allowed_hidden_files:
   - /etc/.setip_config_hash
-proxy_sub_domain: p.myl.moe
-proxy_sub_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-proxy_sub_key: /etc/nginx/tls/cloudflare/myl.moe.key
-proxy_reality_fallback_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-proxy_reality_fallback_key: /etc/nginx/tls/cloudflare/myl.moe.key
 vaultwarden_domain: key.myl.moe
 vaultwarden_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 vaultwarden_key: /etc/nginx/tls/cloudflare/myl.moe.key
@@ -31,9 +26,6 @@ gost_key: /etc/nginx/tls/cloudflare/myl.moe.key
 mc_auth_domain: mcauth.myl.moe
 mc_auth_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 mc_auth_key: /etc/nginx/tls/cloudflare/myl.moe.key
-prules_domain: prules.myl.moe
-prules_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
-prules_key: /etc/nginx/tls/cloudflare/myl.moe.key
 shortlink_domain: my6.co
 shortlink_cert: /etc/nginx/tls/cloudflare/my6.co.pem
 shortlink_key: /etc/nginx/tls/cloudflare/my6.co.key

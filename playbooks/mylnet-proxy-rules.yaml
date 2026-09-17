@@ -1,6 +1,6 @@
 ---
 - name: Deploy mylnet proxy rules
-  hosts: sg
+  hosts: sg1
 
   vars_files:
     - secrets/secrets.yaml
