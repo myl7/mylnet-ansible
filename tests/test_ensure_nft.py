@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-
 MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "ensure_nft.py"
 spec = importlib.util.spec_from_file_location("ensure_nft", MODULE_PATH)
 assert spec is not None
@@ -76,11 +75,13 @@ class ParseArgsTest(unittest.TestCase):
         ]
 
         for args in cases:
-            with self.subTest(args=args):
-                with contextlib.redirect_stderr(io.StringIO()):
-                    with self.assertRaises(SystemExit) as cm:
-                        ensure_nft.parse_args(args)
-                self.assertEqual(cm.exception.code, 2)
+            with (
+                self.subTest(args=args),
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit) as cm,
+            ):
+                ensure_nft.parse_args(args)
+            self.assertEqual(cm.exception.code, 2)
 
 
 class ManagedRulesTest(unittest.TestCase):
@@ -145,10 +146,12 @@ class NftCommandTest(unittest.TestCase):
         run_nft.assert_called_once_with(["-s", "-a", "list", "chain", "inet", "filter", "input_ipv4"])
 
     def test_list_chain_failure_exits_one(self):
-        with mock.patch.object(ensure_nft, "run_nft", return_value=completed([], returncode=1, stderr="missing\n")):
-            with contextlib.redirect_stderr(io.StringIO()):
-                with self.assertRaises(SystemExit) as cm:
-                    ensure_nft.list_chain(self.rule)
+        with (
+            mock.patch.object(ensure_nft, "run_nft", return_value=completed([], returncode=1, stderr="missing\n")),
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit) as cm,
+        ):
+            ensure_nft.list_chain(self.rule)
 
         self.assertEqual(cm.exception.code, 1)
 
@@ -266,9 +269,9 @@ table inet filter {
             mock.patch.object(ensure_nft, "add_rule", side_effect=SystemExit(1)) as add_rule,
             mock.patch.object(ensure_nft, "delete_rule") as delete_rule,
             contextlib.redirect_stdout(stdout),
+            self.assertRaises(SystemExit) as cm,
         ):
-            with self.assertRaises(SystemExit) as cm:
-                ensure_nft.main(RULE_ARGS)
+            ensure_nft.main(RULE_ARGS)
 
         self.assertEqual(cm.exception.code, 1)
         add_rule.assert_called_once()

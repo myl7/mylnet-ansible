@@ -6,7 +6,6 @@ import sys
 from dataclasses import dataclass
 from typing import Never
 
-
 MANAGED_COMMENT = "ANSIBLE MANAGED RULE"
 SUPPORTED_VERDICTS = {"accept", "drop"}
 
@@ -166,8 +165,7 @@ def run_nft(args: list[str]) -> subprocess.CompletedProcess[str]:
         ["nft", *args],
         check=False,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
 
 
