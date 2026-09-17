@@ -7,6 +7,12 @@
   gather_facts: false
   become: true
 
+  vars:
+    # zram size as a percentage of RAM, so hosts with different amounts of
+    # memory scale on their own.
+    zram_percent: 50
+    swap_file_size: 1G
+
   vars_files:
     - secrets/secrets.yaml
 
@@ -33,6 +39,94 @@
 
     - name: Gather facts
       ansible.builtin.setup:
+
+    # Before the upgrade: this is the heaviest step of the play on a small
+    # host, and the point of the swap below is to be there when memory runs
+    # out. A host with no swap anywhere can only reclaim page cache, so once
+    # memory runs out it evicts the cache and then spends all its CPU faulting
+    # that cache back in from disk. zram gives the kernel somewhere cheap to
+    # put anonymous pages: they stay in RAM, compressed, and the cache
+    # survives. The swap file is the overflow for when even that fills.
+    - name: Install zram tools
+      ansible.builtin.apt:
+        name:
+          - zram-tools
+        state: present
+        update_cache: true
+
+    - name: Configure zram swap
+      ansible.builtin.copy:
+        content: |
+          # Managed by mylnet-ansible init.yaml.
+          ALGO=zstd
+          PERCENT={{ zram_percent }}
+          PRIORITY=100
+        dest: /etc/default/zramswap
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart zram swap
+
+    # Priority 100 beats the 10 on the swap file below, so zram takes the
+    # first hit and the disk only sees what zram could not hold.
+    - name: Start and enable zram swap
+      ansible.builtin.systemd_service:
+        name: zramswap.service
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Create swap file
+      ansible.builtin.command:
+        cmd: fallocate -l {{ swap_file_size }} /swapfile
+        creates: /swapfile
+
+    - name: Restrict swap file
+      ansible.builtin.file:
+        path: /swapfile
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: List active swap devices
+      ansible.builtin.command:
+        cmd: swapon --show=NAME --noheadings
+      register: swap_active
+      changed_when: false
+
+    - name: Read swap file signature
+      ansible.builtin.command:
+        cmd: blkid -o value -s TYPE /swapfile
+      register: swap_file_type
+      changed_when: false
+      failed_when: false
+
+    # Two guards, not one. A file that is active as swap must never have a new
+    # signature written over it, and that has to hold even if blkid fails to
+    # report the signature of a file in use.
+    - name: Format swap file
+      ansible.builtin.command:
+        cmd: mkswap /swapfile
+      when:
+        - swap_file_type.stdout | trim != "swap"
+        - "'/swapfile' not in swap_active.stdout"
+      changed_when: true
+
+    - name: Configure swap file in fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^/swapfile\s'
+        line: "/swapfile none swap sw,pri=10 0 0"
+
+    # swapon -a, not swapon /swapfile: only the former reads the priority out
+    # of fstab. Enabling the file by path gives it the kernel default instead,
+    # which on a host that already swaps somewhere else leaves the ordering
+    # wrong until the next boot. Devices already in use are skipped.
+    - name: Enable swap file
+      ansible.builtin.command:
+        cmd: swapon -a
+      when: "'/swapfile' not in swap_active.stdout"
+      changed_when: true
 
     - name: Upgrade packages
       ansible.builtin.apt:
@@ -122,8 +216,8 @@
         mode: "0755"
 
     - name: Setup nftables
-      ansible.builtin.copy:
-        src: nftables.conf
+      ansible.builtin.template:
+        src: nftables.conf.j2
         dest: /etc/nftables.conf
         owner: root
         group: root
@@ -171,6 +265,12 @@
         path: "/home/{{ username }}"
         state: directory
         mode: "0700"
+
+  handlers:
+    - name: Restart zram swap
+      ansible.builtin.systemd_service:
+        name: zramswap.service
+        state: restarted
 
   post_tasks:
     - name: Show SSH and nftables reload notice

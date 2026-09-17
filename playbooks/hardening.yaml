@@ -56,6 +56,38 @@
       loop: "{{ unwanted_services }}"
       when: item in ansible_facts.services
 
+    # The SSH port is on the public internet and takes about 19k failed logins
+    # a day, 93% of them from one datacenter /24. Password and
+    # keyboard-interactive auth are already off, so the cost is not access but
+    # resources: pre-auth connections, the audit and btmp records they write,
+    # and the journal they fill. The per-source rate limit and the blocked
+    # networks live with the port rule in templates/nftables.conf.j2, because
+    # they have to run before that rule to have any effect.
+    #
+    # What is left here is what a connection that gets through can pin.
+    # MaxStartups is a memory ceiling as much as a load ceiling: every
+    # unauthenticated connection holds an sshd process until it authenticates
+    # or LoginGraceTime expires. Debian's default (10:30:100, 2m) allows
+    # ~100 x ~6M, more than the free memory on a 2 GiB host; 10:30:30 and 20s
+    # put the worst case near 170M and still leave room for parallel playbook
+    # runs.
+    - name: Limit SSH pre-auth connections
+      ansible.builtin.copy:
+        # A drop-in rather than an edit of sshd_config: init.yaml already owns
+        # an ANSIBLE MANAGED BLOCK there, and a second one would collide with
+        # the marker it searches for. The Include in sshd_config sits after
+        # that block, so init.yaml's directives still win where they overlap.
+        content: |
+          # Managed by mylnet-ansible hardening.yaml.
+          LoginGraceTime 20
+          MaxStartups 10:30:30
+        dest: /etc/ssh/sshd_config.d/99-mylnet-hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Reload SSH
+
     # lynis KRNL-5820
     - name: Disable core dumps
       ansible.builtin.copy:
@@ -370,6 +402,12 @@
         or modprobe_unused_net_proto_config.changed
 
   handlers:
+    # Reload, not restart: sshd re-execs and keeps existing sessions alive.
+    - name: Reload SSH
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: reloaded
+
     - name: Load auditd rules
       ansible.builtin.command:
         cmd: augenrules --load

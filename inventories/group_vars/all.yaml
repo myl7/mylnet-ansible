@@ -1,2 +1,10 @@
 ---
 username: myl
+
+# Networks that get a flat drop on every host, rendered by init.yaml into the
+# SSH chain of /etc/nftables.conf. Only sources that have shown they do nothing
+# else belong here. Lanedonet Datacenter (NL) sent 17,939 of the 19,322 failed
+# SSH logins on 2026-09-17, spread over a dozen addresses in this /24 to stay
+# under any per-address threshold.
+ssh_blocked_networks:
+  - 77.83.39.0/24

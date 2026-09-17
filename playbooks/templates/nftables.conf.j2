@@ -3,8 +3,28 @@
 flush ruleset
 
 table inet filter {
+	# Sources that tripped the SSH rate limit below, until their 10 minute
+	# timeout runs out. Recreated empty on every reload.
+	set ssh_flood {
+		type ipv4_addr
+		flags dynamic, timeout
+		timeout 10m
+	}
+
 	chain input_ipv4 {
 		icmp type echo-request limit rate 5/second accept
+{% for network in ssh_blocked_networks %}
+		# Only ever connects to guess SSH passwords.
+		ip saddr {{ network }} drop
+{% endfor %}
+		# Cap how fast one source can open new SSH connections (30 a minute,
+		# 10 as a burst). An unauthenticated connection pins an sshd process
+		# until it authenticates or LoginGraceTime expires, so this bounds
+		# what a single source can make the host hold. Wide enough that
+		# ordinary use, including this repo's own playbook runs, never
+		# reaches it. Established sessions, loopback, and tailscale0 are
+		# accepted by the INPUT chain before it jumps here.
+		tcp dport 50000 ct state new update @ssh_flood { ip saddr limit rate over 30/minute burst 10 packets } drop
 		tcp dport 50000 accept
 		tcp dport 80 accept
 		tcp dport 443 accept
