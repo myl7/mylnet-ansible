@@ -95,7 +95,7 @@ proxies:
   - name: {{ proxy_host | to_json }}
     type: vless
     server: {{ proxy_hosts[proxy_host] | to_json }}
-    port: {{ proxy_port }}
+    port: {{ proxy_ports[proxy_host] }}
     udp: true
     uuid: {{ proxy_vless_credentials[proxy_host].uuid | to_json }}
     flow: xtls-rprx-vision

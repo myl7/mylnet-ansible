@@ -5,6 +5,7 @@ ansible_port = 50000
 [hosts.hosts]
 bwh = { ansible_host = "104.243.29.231" }
 sg1 = { ansible_host = "167.104.101.86" }
+jp1 = { ansible_host = "167.104.165.185", proxy_port = 443 }
 
 # cu is a CityU workstation, reachable only over the tailnet. It never ran
 # init.yaml, so it stays out of the hosts group and keeps the default ssh port.
@@ -20,6 +21,7 @@ sg1 = {}
 [proxy.hosts]
 bwh = {}
 sg1 = {}
+jp1 = {}
 
 [raw]
 children = ["bandwagon", "hosthatch"]
@@ -40,3 +42,4 @@ ansible_port = 22
 
 [hosthatch.hosts]
 "sg1.raw" = { ansible_host = "167.104.101.86" }
+"jp1.raw" = { ansible_host = "167.104.165.185" }

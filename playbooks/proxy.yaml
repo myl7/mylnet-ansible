@@ -170,6 +170,12 @@
           proxy_hostnames | map('extract', hostvars, 'ansible_host')
         ))
       }}
+    proxy_ports: >-
+      {{
+        dict(proxy_hostnames | zip(
+          proxy_hostnames | map('extract', hostvars, 'proxy_port')
+        ))
+      }}
 
   tags: [proxy-sub]
 
@@ -210,6 +216,14 @@
         that:
           - hostvars[item].ansible_host | default('') | string | trim | length > 0
         fail_msg: "Set ansible_host for proxy host {{ item }}"
+        quiet: true
+      loop: "{{ proxy_hostnames }}"
+
+    - name: Check proxy_port for each proxy host
+      ansible.builtin.assert:
+        that:
+          - hostvars[item].proxy_port | default(0) | int > 0
+        fail_msg: "Set proxy_port for proxy host {{ item }}"
         quiet: true
       loop: "{{ proxy_hostnames }}"
 
