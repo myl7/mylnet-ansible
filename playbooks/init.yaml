@@ -33,6 +33,19 @@
         fail_msg: "Set root_password_hashes and user_password_hashes (a sha512-crypt hash per host) for {{ inventory_hostname_short }} in secrets.yaml"
         quiet: true
 
+    - name: Check SMTP config
+      ansible.builtin.assert:
+        that:
+          - system_smtp_host is defined
+          - system_smtp_port is defined
+          - system_smtp_username is defined
+          - system_smtp_password is defined
+          - system_smtp_from is defined
+          - system_smtp_to is defined
+        fail_msg: "Set system_smtp_host, system_smtp_port, system_smtp_username, system_smtp_password, system_smtp_from, system_smtp_to in secrets.yaml"
+        quiet: true
+      tags: smtp
+
   tasks:
     - name: Bootstrap Python for Ansible
       ansible.builtin.raw: |
@@ -164,6 +177,32 @@
           - tmux
           - python3-debian # For deb822_repository module
         state: present
+
+    - name: Configure CLI system mail
+      tags: smtp
+      block:
+        - name: Install SMTP transport
+          ansible.builtin.apt:
+            name: msmtp-mta
+            state: present
+
+        - name: Configure msmtp
+          ansible.builtin.template:
+            src: msmtp/msmtprc.j2
+            dest: /etc/msmtprc
+            owner: root
+            group: root
+            mode: "0600" # Required by msmtp
+
+        - name: Route local system mail to system_smtp_to
+          ansible.builtin.copy:
+            content: |
+              root: {{ system_smtp_to }}
+              default: {{ system_smtp_to }}
+            dest: /etc/aliases
+            owner: root
+            group: root
+            mode: "0644"
 
     - name: Set hostname
       ansible.builtin.hostname:

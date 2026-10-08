@@ -31,7 +31,8 @@ hosts, but are inexpensive and remain part of the existing baseline.
 - Scheduled debsums checksum checks and the package installation.
 - Auditd email reports, checkpoints, and the custom reporting script.
 - Monthly passwd/shadow email reports and the custom pwck reporting script.
-- Msmtp system mail transport, recipient aliases, and SMTP secret requirements.
+- SMTP configuration and secret requirements in Hardening. CLI mail is now
+  configured separately by Init, as described below.
 - Apt-show-versions installation, which only provided a manual inspection tool.
 
 These checks mostly report findings rather than prevent access. For this personal
@@ -177,9 +178,33 @@ depended on the mail transport. No blanket autoremove was performed.
 | bwh | `/root/hardening-mail-backup-20261008-132511` |
 | jp1 | `/root/hardening-mail-backup-20261008-132520` |
 
-Each backup includes the old configuration, package state, APT removal preview
-and log, and verification records. Checks confirmed that retired packages and
+The backups included the old configuration, package state, APT removal preview
+and log, and verification records. All three backup directories were deleted
+after verification on 2026-10-08 at the owner's request. Checks confirmed that retired packages and
 report cron files were absent. Automatic update timers, sysstat timers, SSH,
 and journald remained active. SSH, sysctl, APT, journal, audit watch rules where
 present, and aliases retained their original checksums. Auditd remained active
 on sg1 and jp1 and inactive on bwh. Running Docker container IDs were unchanged.
+
+## CLI SMTP restored in Init
+
+CLI mail remains useful independently of scheduled security reports. Its
+`msmtp-mta` installation, `/etc/msmtprc` template, local aliases, and SMTP
+variable checks now belong to `playbooks/init.yaml`. The SMTP secret block is
+labelled `init.yaml (CLI system mail)` in the separate secrets repository.
+
+To configure only SMTP on existing hosts without applying the other Init tasks:
+
+```sh
+ansible-playbook playbooks/init.yaml --tags smtp --limit sg1,bwh,jp1
+```
+
+This restores `msmtp` and a sendmail-compatible CLI. It does not install mailx or
+restore the retired scanners and report jobs. SMTP credential values are loaded
+by Ansible from the secrets file and do not need to be copied into chat. Retain
+the Mailgun domain `noreply.myl.moe` and its SMTP credentials for this feature.
+
+SMTP-only deployment completed on sg1, bwh, and jp1 on 2026-10-08. Checks
+confirmed that the CLI commands were available, SMTP TLS connections worked,
+retired report jobs remained absent, and retained services remained active. No
+test email was sent.
