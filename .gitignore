@@ -7,6 +7,7 @@
 .codex
 .claude
 .firecrawl
+.zcode/
 
 # Ansible
 .ansible
