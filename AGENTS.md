@@ -1,5 +1,17 @@
 Use `restart: always` for disposable Docker containers.
 
+# Playbook Scope
+
+Playbooks primarily configure new servers and new service deployments.
+When retiring a component, remove its installation and configuration tasks and
+unused supporting files from the repository. Do not add uninstall, purge, or
+file-removal tasks to a provisioning playbook solely to clean up earlier
+deployments, unless the user explicitly requests that behavior.
+
+For existing hosts, identify which machines have the retired component and
+provide separate manual cleanup steps. Execute those steps directly on the
+hosts when authorized by the user.
+
 # Ansible Preference
 
 Use plugin FQDNs in `lookup`, e.g., `lookup('ansible.builtin.env', ...)`.
