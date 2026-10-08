@@ -62,3 +62,7 @@ Put host-shared local config default and asssertion in `pre_tasks`.
 To assign a variable during tasks, because ansible variables are lazily evaluated, just put the assignment in `vars`.
 
 New nginx htpasswd files should be generated with bcrypt cost 5: `htpasswd -cBC 5 <path> <user>`.
+
+# Docker Image Preference
+
+Prefer floating Docker image tags that track upstream stable releases, such as `latest-alpine` for Vaultwarden. This allows updates when the playbook runs without requiring a repository change and commit for every upstream release. Do not pin versions or image digests unless the user explicitly requests it or a specific compatibility issue requires it. Pull images during deployment, verify service health, and record the running version. Preserve the previous image ID or digest for backup and rollback.

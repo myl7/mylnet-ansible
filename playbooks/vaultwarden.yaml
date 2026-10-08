@@ -51,7 +51,6 @@
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
-      notify: Recreate containers
 
     - name: Start containers
       community.docker.docker_compose_v2:
@@ -59,6 +58,8 @@
         state: present
         remove_orphans: true
         pull: always
+        wait: true
+        wait_timeout: 120
 
     - name: Render nginx site
       become: true
@@ -78,9 +79,84 @@
         state: link
       notify: Reload nginx
 
-  handlers:
-    - name: Import docker handlers
-      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+    - name: Apply nginx changes before verification
+      ansible.builtin.meta: flush_handlers
 
+    - name: Verify running Vaultwarden
+      when: not ansible_check_mode
+      block:
+        - name: Read Vaultwarden version
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ vaultwarden_local_port }}/api/version"
+            use_proxy: false
+            return_content: true
+          register: vaultwarden_version_check
+          until:
+            - vaultwarden_version_check.status == 200
+            - vaultwarden_version_check.json is defined
+            - vaultwarden_version_check.json is string
+            - vaultwarden_version_check.json | length > 0
+          retries: 12
+          delay: 5
+
+        - name: Read pulled Vaultwarden image ID
+          ansible.builtin.command:
+            argv:
+              - docker
+              - image
+              - inspect
+              - --format
+              - "{{ '{{.Id}}' }}"
+              - vaultwarden/server:latest-alpine
+          register: vaultwarden_pulled_image
+          changed_when: false
+
+        - name: Read Vaultwarden container ID
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ stack_dir }}"
+              - ps
+              - -q
+              - vaultwarden
+          register: vaultwarden_container_id
+          changed_when: false
+
+        - name: Read running Vaultwarden image ID
+          ansible.builtin.command:
+            argv:
+              - docker
+              - inspect
+              - --format
+              - "{{ '{{.Image}}' }}"
+              - "{{ vaultwarden_container_id.stdout | trim }}"
+          register: vaultwarden_running_image
+          changed_when: false
+
+        - name: Check Vaultwarden image matches pulled tag
+          ansible.builtin.assert:
+            that:
+              - (vaultwarden_running_image.stdout | trim) == (vaultwarden_pulled_image.stdout | trim)
+            fail_msg: "Vaultwarden is not running the pulled latest-alpine image"
+            quiet: true
+
+        - name: Record running Vaultwarden version and image
+          ansible.builtin.debug:
+            msg:
+              version: "{{ vaultwarden_version_check.json }}"
+              image_id: "{{ vaultwarden_running_image.stdout | trim }}"
+
+        - name: Check Vaultwarden database health
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ vaultwarden_local_port }}/api/alive"
+            use_proxy: false
+          register: vaultwarden_health_check
+          until: vaultwarden_health_check.status == 200
+          retries: 12
+          delay: 5
+
+  handlers:
     - name: Import nginx handlers
       ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
