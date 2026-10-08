@@ -13,6 +13,12 @@ server {
         return 404;
     }
 
+    # v8 management plane: management/config API and management OAuth routes
+    location ^~ /v8/ {
+        return 404;
+    }
+
+    # Deprecated v0 management endpoints, still served by v8
     location ^~ /v0/management {
         return 404;
     }
