@@ -11,6 +11,7 @@
     # The management panel is published on the Tailscale IP only, the public nginx site blocks management paths.
     cliproxy_bind_ip: "{{ cliproxy_tailscale_ip.stdout | trim }}"
     stack_dir: /opt/stacks/cli-proxy-api
+    cliproxy_backup_dir: "/var/backups/cli-proxy-api/{{ ansible_facts.date_time.iso8601_basic_short }}"
 
   pre_tasks:
     - name: Default cliproxy_github_token
@@ -80,6 +81,53 @@
         force: false
       notify: Recreate containers
 
+    - name: Record previous container image
+      ansible.builtin.command:
+        argv:
+          - docker
+          - inspect
+          - --format
+          - "{% raw %}{{.Image}}{% endraw %}"
+          - cli-proxy-api
+      register: cliproxy_previous_image
+      changed_when: false
+      failed_when: false
+
+    - name: Back up existing deployment
+      become: true
+      when: cliproxy_previous_image.rc == 0
+      block:
+        - name: Create rollback directory
+          ansible.builtin.file:
+            path: "{{ cliproxy_backup_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0700"
+
+        - name: Back up runtime config and compose
+          ansible.builtin.copy:
+            src: "{{ stack_dir }}/{{ item }}"
+            dest: "{{ cliproxy_backup_dir }}/{{ item }}"
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0600"
+          loop:
+            - config.yaml
+            - compose.yaml
+
+        - name: Save previous image for rollback
+          ansible.builtin.copy:
+            content: |
+              services:
+                cli-proxy-api:
+                  image: {{ cliproxy_previous_image.stdout | trim }}
+            dest: "{{ cliproxy_backup_dir }}/rollback.yaml"
+            owner: root
+            group: root
+            mode: "0600"
+
     - name: Render compose file
       ansible.builtin.template:
         src: cli-proxy-api/compose.yaml.j2
@@ -113,6 +161,27 @@
         dest: /etc/nginx/sites-enabled/cli-proxy-api
         state: link
       notify: Reload nginx
+
+    - name: Apply pending container and nginx changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Migrate and verify CLI Proxy API v8
+      tags: cliproxy_verify
+      ansible.builtin.script:
+        cmd: "{{ playbook_dir }}/../scripts/ensure_cliproxy_v8.py --config {{ stack_dir }}/config.yaml --url http://127.0.0.1:{{ cliproxy_local_port }}"
+        executable: /usr/bin/python3
+      environment:
+        CLIPROXY_MANAGEMENT_KEY: "{{ cliproxy_management_key }}"
+        CLIPROXY_CLIENT_KEY: "{{ cliproxy_api_key }}"
+      register: cliproxy_v8_check
+      changed_when: >-
+        'Migrated config to v8' in cliproxy_v8_check.stdout
+        or 'Updated file logging' in cliproxy_v8_check.stdout
+
+    - name: Show CLI Proxy API verification
+      tags: cliproxy_verify
+      ansible.builtin.debug:
+        msg: "{{ cliproxy_v8_check.stdout_lines }}"
 
   handlers:
     - name: Import docker handlers
