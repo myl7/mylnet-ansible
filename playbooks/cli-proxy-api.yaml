@@ -168,7 +168,11 @@
     - name: Migrate and verify CLI Proxy API v8
       tags: cliproxy_verify
       ansible.builtin.script:
-        cmd: "{{ playbook_dir }}/../scripts/ensure_cliproxy_v8.py --config {{ stack_dir }}/config.yaml --url http://127.0.0.1:{{ cliproxy_local_port }}"
+        cmd: >-
+          {{ playbook_dir }}/../scripts/ensure_cliproxy_v8.py
+          --config {{ stack_dir }}/config.yaml
+          --url http://127.0.0.1:{{ cliproxy_local_port }}
+          --compatible-model deepseek-v4-flash
         executable: /usr/bin/python3
       environment:
         CLIPROXY_MANAGEMENT_KEY: "{{ cliproxy_management_key }}"
@@ -177,6 +181,7 @@
       changed_when: >-
         'Migrated config to v8' in cliproxy_v8_check.stdout
         or 'Updated file logging' in cliproxy_v8_check.stdout
+        or 'Updated compatible models' in cliproxy_v8_check.stdout
 
     - name: Show CLI Proxy API verification
       tags: cliproxy_verify

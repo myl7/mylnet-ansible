@@ -5,10 +5,10 @@ import argparse
 import copy
 import json
 import os
-from pathlib import Path
 import re
 import sys
 import time
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -17,6 +17,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True)
     parser.add_argument('--url', required=True)
+    parser.add_argument('--compatible-model', action='append', default=[],
+                        help='Preserve Claude thinking history for this model name or alias')
     args = parser.parse_args()
     management_key = os.environ['CLIPROXY_MANAGEMENT_KEY']
     client_key = os.environ['CLIPROXY_CLIENT_KEY']
@@ -47,25 +49,46 @@ def main():
     assert before['config-version'] == 8, 'Server does not expose v8 configuration'
     expected = copy.deepcopy(before)
     logs = expected.setdefault('observability', {}).setdefault('logs', {})
+    logging_changed = logs.get('logging-to-file') is not True
     logs['logging-to-file'] = True
+    compatibility_changed = False
+    for model_name in args.compatible_model:
+        matches = [
+            model
+            for provider in expected.get('api-keys', {}).get('openai-compatibility', [])
+            for model in provider.get('models', [])
+            if model_name in (model.get('name'), model.get('alias'))
+        ]
+        assert matches, 'Compatible model is not configured: ' + model_name
+        for model in matches:
+            if model.get('is-compat') is not True:
+                model['is-compat'] = True
+                compatibility_changed = True
     current = Path(args.config).read_text()
-    migrated = not re.search(r'^config-version:\s*8\s*(?:#.*)?$', current, re.M)
+    migrated = not re.search(r'^config-version:\s*8\s*(?:#.*)?$', current, re.MULTILINE)
     changed = migrated or before != expected
     if changed:
-        result = request('/v8/management/config', management_key, 'PATCH', {
+        patch = {
             'observability': {'logs': {'logging-to-file': True}},
-        })
+        }
+        if compatibility_changed:
+            patch['api-keys'] = {
+                'openai-compatibility': expected['api-keys']['openai-compatibility'],
+            }
+        result = request('/v8/management/config', management_key, 'PATCH', patch)
         assert result.get('status') == 'ok' and result.get('config-version') == 8
 
     after = request('/v8/management/config', management_key)
-    assert after == expected, 'Configuration changed beyond enabling file logging'
-    assert re.search(r'^config-version:\s*8\s*(?:#.*)?$', Path(args.config).read_text(), re.M)
+    assert after == expected, 'Configuration changed beyond logging and model compatibility'
+    assert re.search(r'^config-version:\s*8\s*(?:#.*)?$', Path(args.config).read_text(), re.MULTILINE)
     models = request('/v1/models', client_key)
     assert models.get('object') == 'list' and models.get('data'), 'No models available'
     report = request('/v8/management/observability/logs?limit=2', management_key)
     assert report.get('line-count', 0) > 0, 'File log has no entries'
     credentials = request('/v8/management/credentials', management_key)
-    print('Migrated config to v8' if migrated else 'Updated file logging' if changed else 'Config already uses v8')
+    print('Migrated config to v8' if migrated else 'Updated file logging' if logging_changed else 'Config already uses v8')
+    if compatibility_changed:
+        print('Updated compatible models:', ', '.join(args.compatible_model))
     if server_version:
         print('Running version:', server_version)
     print('Verified authenticated models, management API, and nonempty file logs')
