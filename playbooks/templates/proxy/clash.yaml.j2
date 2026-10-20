@@ -233,7 +233,8 @@ proxy-groups:
 
 {% set openai_asns = [401518, 401864] %}{# OpenAI #}
 {% set anthropic_asns = [399358] %}{# Anthropic #}
-{% set proxy_ai_asns = proxy_ai_asns | default(openai_asns + anthropic_asns) %}
+{% set xai_asns = [400297] %}{# xAI #}
+{% set proxy_ai_asns = proxy_ai_asns | default(openai_asns + anthropic_asns + xai_asns) %}
 
 rule-providers:
   anti-ad:
@@ -272,6 +273,53 @@ rules:
   - DOMAIN-SUFFIX,generativelanguage.googleapis.com,ai
   - DOMAIN-KEYWORD,openrouter,ai
   - DOMAIN-KEYWORD,groq,ai
+  # Grok / xAI (the groq keyword above is Groq Inc, not grok)
+  - DOMAIN-SUFFIX,x.ai,ai
+  - DOMAIN-SUFFIX,grok.com,ai
+  - DOMAIN-SUFFIX,grok.x.com,ai
+  - DOMAIN-SUFFIX,grokipedia.com,ai
+  # OpenAI companion domains the openai/chatgpt keywords miss
+  - DOMAIN-SUFFIX,oaistatic.com,ai
+  - DOMAIN-SUFFIX,oaiusercontent.com,ai
+  - DOMAIN-SUFFIX,oaistatsig.com,ai
+  - DOMAIN-SUFFIX,chat.com,ai
+  - DOMAIN-SUFFIX,sora.com,ai
+  - DOMAIN-SUFFIX,livekit.cloud,ai
+  # Anthropic additions the claude/anthropic keywords miss
+  - DOMAIN-SUFFIX,clau.de,ai
+  - DOMAIN-SUFFIX,servd-anthropic-website.b-cdn.net,ai
+  # Third-party experiment/fraud/captcha services the AI web apps load;
+  # they must share the ai egress, not leak a direct-connection IP
+  # (the netcheck.wenbo.io consistency checks probe exactly these).
+  - DOMAIN-SUFFIX,statsig.com,ai
+  - DOMAIN-SUFFIX,statsigcdn.com,ai
+  - DOMAIN-SUFFIX,statsigapi.net,ai
+  - DOMAIN-SUFFIX,sift.com,ai
+  - DOMAIN-SUFFIX,hcaptcha.com,ai
+  # Google AI past the gemini keyword: NotebookLM, Jules, Labs, AI Studio
+  # backends, Gemini Code Assist
+  - DOMAIN-SUFFIX,ai.google.dev,ai
+  - DOMAIN-SUFFIX,generativeai.google,ai
+  - DOMAIN-SUFFIX,makersuite.google.com,ai
+  - DOMAIN-SUFFIX,ai.studio,ai
+  - DOMAIN-SUFFIX,clients6.google.com,ai
+  - DOMAIN-SUFFIX,notebooklm.google.com,ai
+  - DOMAIN-SUFFIX,notebook.google.com,ai
+  - DOMAIN-SUFFIX,jules.google.com,ai
+  - DOMAIN-SUFFIX,labs.google.com,ai
+  - DOMAIN-SUFFIX,flow.google.com,ai
+  - DOMAIN-SUFFIX,deepmind.google,ai
+  - DOMAIN-SUFFIX,notebooklm.googleapis.com,ai
+  - DOMAIN-SUFFIX,notebooklm-pa.googleapis.com,ai
+  - DOMAIN-SUFFIX,labstailwind.pa.googleapis.com,ai
+  - DOMAIN-SUFFIX,cloudcode-pa.googleapis.com,ai
+  - DOMAIN-SUFFIX,cloudaicompanion.googleapis.com,ai
+  - DOMAIN-SUFFIX,aicode.googleapis.com,ai
+  - DOMAIN-SUFFIX,aida.googleapis.com,ai
+  - DOMAIN-SUFFIX,antigravity.googleapis.com,ai
+  - DOMAIN-SUFFIX,antigravity-pa.googleapis.com,ai
+  # aiplatform/storage.googleapis.com stay out until Vertex AI or Gemini
+  # API file uploads are actually used; they are global Google buckets.
 
 {{ lookup('ansible.builtin.file', 'secrets/clash_rules_extend.yaml').split('\n')[1:] | join('\n') }}
 

@@ -202,6 +202,27 @@ class TailscaleOutboundTest(unittest.TestCase):
             self.assertIn(rule, rules)
         self.assertEqual(rules[-1], "MATCH,default")
 
+    def test_ai_rules(self):
+        rules = self.config["rules"]
+        for rule in (
+            "DOMAIN-SUFFIX,x.ai,ai",
+            "DOMAIN-SUFFIX,grok.com,ai",
+            "DOMAIN-SUFFIX,grok.x.com,ai",
+            "DOMAIN-SUFFIX,oaistatic.com,ai",
+            "DOMAIN-SUFFIX,oaistatsig.com,ai",
+            "DOMAIN-SUFFIX,sift.com,ai",
+            "DOMAIN-SUFFIX,hcaptcha.com,ai",
+            "DOMAIN-SUFFIX,notebooklm.google.com,ai",
+            "DOMAIN-SUFFIX,clients6.google.com,ai",
+            "IP-ASN,400297,ai",
+        ):
+            self.assertIn(rule, rules)
+        # The AI rules stay ahead of the CN and final match rules so AI
+        # traffic always reaches the ai group.
+        for rule in ("GEOSITE,cn,cn", "GEOIP,CN,cn", "MATCH,default"):
+            self.assertLess(rules.index("DOMAIN-SUFFIX,x.ai,ai"), rules.index(rule))
+        self.assertLess(rules.index("IP-ASN,400297,ai"), rules.index("GEOIP,CN,cn"))
+
 
 class PlainFlavorTest(unittest.TestCase):
     """clash_tailnet: false — the plain subscription for clients with native
