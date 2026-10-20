@@ -176,6 +176,12 @@
           proxy_hostnames | map('extract', hostvars, 'proxy_port')
         ))
       }}
+    proxy_tailnet_ips: >-
+      {{
+        dict(proxy_hostnames | zip(
+          proxy_hostnames | map('extract', hostvars, 'tailnet_ip')
+        ))
+      }}
 
   tags: [proxy-sub]
 
@@ -210,6 +216,22 @@
           - proxy_sub_id is defined
         fail_msg: "Set proxy_sub_id in secrets.yaml"
         quiet: true
+
+    - name: Check clash_tailnet_domain and clash_tailscale_hostname
+      ansible.builtin.assert:
+        that:
+          - clash_tailnet_domain is defined
+          - clash_tailscale_hostname is defined
+        fail_msg: "Set clash_tailnet_domain and clash_tailscale_hostname in inventories/group_vars/proxy.yaml"
+        quiet: true
+
+    - name: Check tailnet_ip for proxy hosts and cu
+      ansible.builtin.assert:
+        that:
+          - hostvars[item].tailnet_ip is defined
+        fail_msg: "Set tailnet_ip for {{ item }} in inventories/hosts.toml"
+        quiet: true
+      loop: "{{ proxy_hostnames + ['cu'] }}"
 
     - name: Check ansible_host for each proxy host
       ansible.builtin.assert:
@@ -247,13 +269,25 @@
         group: root
         mode: "0755"
 
-    - name: Render subscription content
+    - name: Render subscription content (plain)
       ansible.builtin.template:
         src: proxy/clash.yaml.j2
         dest: /var/www/proxy-sub/clash.yaml
         owner: root
         group: root
         mode: "0644"
+      vars:
+        clash_tailnet: false
+
+    - name: Render subscription content (tailnet)
+      ansible.builtin.template:
+        src: proxy/clash.yaml.j2
+        dest: /var/www/proxy-sub/clash-tailnet.yaml
+        owner: root
+        group: root
+        mode: "0644"
+      vars:
+        clash_tailnet: true
 
     - name: Render subscription nginx site
       ansible.builtin.template:

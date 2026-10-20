@@ -9,12 +9,23 @@ server {
     root /var/www/proxy-sub;
     autoindex off;
 
+    # Plain flavor: the default URL, for clients with native tailscale or none.
     location = /{{ proxy_sub_id }} {
         types {}
         default_type text/yaml;
         add_header Cache-Control "no-store";
         include snippets/headers.conf;
         try_files /clash.yaml =404;
+    }
+
+    # Tailnet flavor (path suffix on the same id): for FlClash-class
+    # clients that carry the tailnet inside the subscription.
+    location = /{{ proxy_sub_id }}/tailnet {
+        types {}
+        default_type text/yaml;
+        add_header Cache-Control "no-store";
+        include snippets/headers.conf;
+        try_files /clash-tailnet.yaml =404;
     }
 
     location / {

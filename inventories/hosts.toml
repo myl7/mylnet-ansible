@@ -3,9 +3,9 @@ ansible_user = "{{ username }}"
 ansible_port = 50000
 
 [hosts.hosts]
-bwh = { ansible_host = "104.243.29.231" }
-sg1 = { ansible_host = "167.104.101.86" }
-jp1 = { ansible_host = "167.104.165.185", proxy_port = 443 }
+bwh = { ansible_host = "104.243.29.231", tailnet_ip = "100.126.136.117" }
+sg1 = { ansible_host = "167.104.101.86", tailnet_ip = "100.94.106.77" }
+jp1 = { ansible_host = "167.104.165.185", proxy_port = 443, tailnet_ip = "100.108.167.125" }
 
 # cu is a CityU workstation, reachable only over the tailnet. It never ran
 # init.yaml, so it stays out of the hosts group and keeps the default ssh port.
@@ -13,7 +13,17 @@ jp1 = { ansible_host = "167.104.165.185", proxy_port = 443 }
 ansible_user = "{{ username }}"
 
 [clients.hosts]
-cu = { ansible_host = "100.69.54.3" }
+cu = { ansible_host = "100.69.54.3", tailnet_ip = "100.69.54.3" }
+
+# The CityU GPU servers, reachable only over the tailnet. Like cu, they never
+# ran init.yaml, so they stay out of the hosts group and keep the default ssh
+# port. The login user differs per host: myl on cs11369a, yulong on cs659b.
+[cityu.vars]
+ansible_user = "{{ username }}"
+
+[cityu.hosts]
+cs11369a = { tailnet_ip = "100.104.99.124" }
+cs659b = { ansible_user = "yulong", tailnet_ip = "100.67.212.32" }
 
 [web.hosts]
 sg1 = {}

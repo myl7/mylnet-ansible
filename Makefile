@@ -24,5 +24,7 @@ lint-ansible:
 lint-mypy:
 	mypy --check-untyped-defs --python-executable $(ANSIBLE_PYTHON) $(PY_FILES)
 
+# Template tests import jinja2 and yaml, which the ansible venv provides but
+# the system python3 does not.
 test:
-	python3 -m unittest discover -s tests
+	$(ANSIBLE_PYTHON) -m unittest discover -s tests

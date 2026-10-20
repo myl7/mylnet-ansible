@@ -6,3 +6,8 @@ proxy_reality_fallback_bytes_per_second: 10240 # 10 KiB/s
 
 proxy_ai_hostname: sg1
 proxy_proxy_hostname: sg1
+
+# MagicDNS suffix of the tailnet exposed through the TAILNET outbound in the
+# Clash subscription, and the hostname the tsnet client registers as.
+clash_tailnet_domain: tailnet-d39d.ts.net
+clash_tailscale_hostname: vs30-mihomo

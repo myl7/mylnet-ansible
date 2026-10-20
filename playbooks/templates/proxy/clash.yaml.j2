@@ -1,4 +1,9 @@
-log-level: error
+# clash_tailnet selects the flavor. true renders the tailnet subscription
+# (TAILNET outbound, *-tailnet nodes, tailnet DNS policy and rules) for
+# FlClash-class clients that carry the tailnet inside the subscription;
+# false renders the plain subscription for clients with native tailscale
+# or no tailnet at all.
+log-level: info
 mixed-port: 7890
 allow-lan: false
 ipv6: false
@@ -69,6 +74,10 @@ dns:
     - https://dns.alidns.com/dns-query
     - https://1.1.1.1/dns-query
   direct-nameserver: []
+{% if clash_tailnet %}
+  nameserver-policy:
+    "+.{{ clash_tailnet_domain }}": ts://TAILNET
+{% endif %}
   fallback: []
   fallback-filter:
     geoip: true
@@ -112,6 +121,63 @@ proxies:
       enabled: false
 {% endfor %}
 
+{% if clash_tailnet %}
+{% for proxy_host in proxy_hostnames %}
+  # {{ proxy_host }}-tailnet: the same VLESS service, dialed through the
+  # TAILNET outbound (dialer-proxy) at its tailnet address. Works wherever
+  # the tailnet is reachable, also when the public endpoint is not.
+  - name: {{ (proxy_host ~ '-tailnet') | to_json }}
+    type: vless
+    server: {{ proxy_tailnet_ips[proxy_host] | to_json }}
+    port: {{ proxy_ports[proxy_host] }}
+    udp: true
+    uuid: {{ proxy_vless_credentials[proxy_host].uuid | to_json }}
+    flow: xtls-rprx-vision
+    packet-encoding: xudp
+    tls: true
+    servername: {{ proxy_reality_server_name | to_json }}
+    client-fingerprint: chrome
+    reality-opts:
+      public-key: {{ proxy_vless_credentials[proxy_host].reality_public_key | to_json }}
+      short-id: {{ proxy_vless_credentials[proxy_host].reality_short_id | to_json }}
+    encryption: ""
+    network: tcp
+    dialer-proxy: TAILNET
+    smux:
+      enabled: false
+{% endfor %}
+
+  # cu-tailnet: cu runs no VLESS service. Its SOCKS at the cityu-print
+  # transport port (no auth) egresses on the CityU campus network, also
+  # dialed through the TAILNET outbound.
+  - name: cu-tailnet
+    type: socks5
+    server: {{ hostvars['cu'].tailnet_ip | to_json }}
+    port: {{ cityu_print_socks_port }}
+    udp: false
+    dialer-proxy: TAILNET
+
+  # TAILNET keeps its identity in state-dir. The optional
+  # clash_tailscale_auth_key secret (secrets.yaml) enables a headless first
+  # login: deploy with the key, log in once, remove the key.
+  # dialer-proxy routes the tailnet control plane through ts-underlay. The
+  # phone runs the fixed core (mihomo#3142 wildcard proxydialer fix, fork
+  # v0.9.0-myl7.1); stock cores drop tailnet traffic with this set, so only
+  # the fixed-core build may consume this flavor.
+  - name: TAILNET
+    type: tailscale
+    hostname: {{ clash_tailscale_hostname | to_json }}
+{% if clash_tailscale_auth_key is defined %}
+    auth-key: {{ clash_tailscale_auth_key | to_json }}
+{% endif %}
+    state-dir: ./tailscale
+    dialer-proxy: ts-underlay
+    ephemeral: false
+    udp: true
+    accept-routes: true
+    ip-version: ipv4-prefer
+{% endif %}
+
 proxy-groups:
   - name: default
     type: select
@@ -124,6 +190,12 @@ proxy-groups:
 {% for proxy_host in proxy_hostnames | move_first(proxy_proxy_hostname) %}
       - {{ proxy_host | to_json }}
 {% endfor %}
+{% if clash_tailnet %}
+{% for proxy_host in proxy_hostnames %}
+      - {{ (proxy_host ~ '-tailnet') | to_json }}
+{% endfor %}
+      - cu-tailnet
+{% endif %}
       - DIRECT
   - name: cn
     type: select
@@ -132,6 +204,9 @@ proxy-groups:
 {% for proxy_host in proxy_hostnames %}
       - {{ proxy_host | to_json }}
 {% endfor %}
+{% if clash_tailnet %}
+      - cu-tailnet
+{% endif %}
   - name: ai
     type: select
     proxies:
@@ -140,6 +215,21 @@ proxy-groups:
       - {{ proxy_host | to_json }}
 {% endfor %}
       - DIRECT
+
+{% if clash_tailnet %}
+  # Underlay selection for the TAILNET outbound: control plane, DERP and
+  # WireGuard traffic. Dormant until the subscription's TAILNET outbound
+  # carries dialer-proxy (needs a core with the wildcard proxydialer fix,
+  # mihomo#3142). The *-tailnet nodes dial through TAILNET and would loop;
+  # they must never join this group.
+  - name: ts-underlay
+    type: select
+    proxies:
+      - DIRECT
+{% for proxy_host in proxy_hostnames %}
+      - {{ proxy_host | to_json }}
+{% endfor %}
+{% endif %}
 
 {% set openai_asns = [401518, 401864] %}{# OpenAI #}
 {% set anthropic_asns = [399358] %}{# Anthropic #}
@@ -155,6 +245,17 @@ rule-providers:
     interval: 86400
 
 rules:
+{% if clash_tailnet %}
+  # Tailnet destinations must precede GEOSITE/GEOIP private, which would
+  # otherwise send 100.64.0.0/10 traffic to DIRECT.
+  - DOMAIN-SUFFIX,{{ clash_tailnet_domain }},TAILNET
+  - IP-CIDR,100.64.0.0/10,TAILNET,no-resolve
+  - IP-CIDR,100.100.100.100/32,TAILNET,no-resolve
+{% else %}
+  # Plain flavor: the tailnet range falls through to the private rules
+  # below and goes DIRECT, which is right for clients with native
+  # tailscale and harmless for clients without one.
+{% endif %}
   - GEOSITE,private,DIRECT
   - GEOIP,private,DIRECT,no-resolve
   - DOMAIN-SUFFIX,ts.net,DIRECT
