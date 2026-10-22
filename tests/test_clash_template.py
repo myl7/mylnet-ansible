@@ -170,6 +170,13 @@ class TailscaleOutboundTest(unittest.TestCase):
         # on real IPs instead of fake IPs.
         self.assertIn("*", dns["fake-ip-filter"])
 
+    def test_sniffer(self):
+        sniffer = self.config["sniffer"]
+        self.assertTrue(sniffer["enable"])
+        # Outbounds dial the sniffed domain, never the client-resolved IP:
+        # behind a poisoned resolver that IP is garbage.
+        self.assertTrue(sniffer["override-destination"])
+
     def test_tailnet_rules_precede_private_rules(self):
         rules = self.config["rules"]
         self.assertEqual(
@@ -258,6 +265,13 @@ class PlainFlavorTest(unittest.TestCase):
         self.assertNotIn("nameserver-policy", dns)
         self.assertIn("*", dns["fake-ip-filter"])
         self.assertIn("*.ts.net", dns["fake-ip-filter"])
+
+    def test_sniffer(self):
+        sniffer = self.config["sniffer"]
+        self.assertTrue(sniffer["enable"])
+        # Outbounds dial the sniffed domain, never the client-resolved IP:
+        # behind a poisoned resolver that IP is garbage.
+        self.assertTrue(sniffer["override-destination"])
 
     def test_rules(self):
         rules = self.config["rules"]

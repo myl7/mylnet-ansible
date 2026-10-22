@@ -16,7 +16,10 @@ sniffer:
   enable: true
   parse-pure-ip: true
   force-dns-mapping: true
-  override-destination: false
+  # Dial the sniffed domain, not the client-resolved destination: behind
+  # poisoned resolvers the destination IP is garbage, so the outbound
+  # (ai group remotes) must re-resolve the domain itself.
+  override-destination: true
   sniff:
     HTTP:
       ports:
