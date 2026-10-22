@@ -1,6 +1,11 @@
 [hosts.vars]
 ansible_user = "{{ username }}"
 ansible_port = 50000
+# Management connections ride the tailnet. The nftables ssh_flood rate limit
+# exempts iif tailscale0, and the tailnet path bypasses the Clash egress, so
+# playbook runs cannot trip the per-source limit. ansible_host stays the
+# public IP for data uses (proxy subscription, /etc/hosts, gost-client).
+ansible_ssh_common_args = "-o HostName={{ tailnet_ip }}"
 
 [hosts.hosts]
 bwh = { ansible_host = "104.243.29.231", tailnet_ip = "100.126.136.117" }
