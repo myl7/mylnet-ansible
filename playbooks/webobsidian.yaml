@@ -3,13 +3,16 @@
 # Restored from the trial deployment of 2026-09-13, which ran upstream tag
 # v0.1.1 as a bare docker compose stack and was torn down the same day.
 #
-# The image is myl7/webobsidian:v0.1.1 on Docker Hub: upstream publishes no
-# image, so it was built once on the dev machine from tag v0.1.1 (commit
-# c41967a) with its Dockerfile untouched, then pushed. To bump the version:
-# build the new upstream tag the same way (docker buildx build --platform
-# linux/amd64 --load -t myl7/webobsidian:<tag> .; docker push), then update
-# webobsidian_image here. Building happens on the dev machine, not here, and is
-# no longer this playbook's business.
+# The image is myl7/webobsidian on Docker Hub: upstream publishes no image,
+# so it is rebuilt on the dev machine from an upstream tag with its Dockerfile
+# untouched, then pushed. Tags follow Arch pkgrel style, <upstream-tag>-<rebuild
+# serial>: bump the serial when the same upstream tag is rebuilt to pick up a
+# patched node:22-alpine base, and start over at 1 on a new upstream tag. Build
+# with `docker buildx build --platform linux/amd64 --load -t
+# myl7/webobsidian:<tag> .`, push, then update webobsidian_image here. Building
+# happens on the dev machine, not here, and is no longer this playbook's
+# business. v0.1.1-1 rebuilds the v0.1.1 sources (commit c41967a) on Node
+# 22.23.4 for the 2026-10-21 Node security releases.
 #
 # Exposure is twofold: directly on the Tailscale IP (queried below) and through
 # the nginx vhost on webobsidian_domain, which is why the container publishes
@@ -24,7 +27,7 @@
 
   vars:
     stack_dir: /opt/stacks/webobsidian
-    webobsidian_image: myl7/webobsidian:v0.1.1
+    webobsidian_image: myl7/webobsidian:v0.1.1-1
     # The mount is the obsidian dir so every vault under it is reachable;
     # ALLOWED_ROOTS=/vault then lets the UI browse and switch between them.
     webobsidian_vault: /srv/share/obsidian
