@@ -1,0 +1,34 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    restart: always
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+    volumes:
+      - /srv/cityu-gpu/prometheus:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:{{ cityu_gpu_prometheus_local_port }}:9090"
+    logging:
+      driver: local
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    environment:
+      - GF_SERVER_ROOT_URL=https://{{ cityu_gpu_domain }}
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD={{ cityu_gpu_grafana_admin_password | replace("$", "$$") }}
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/cityu-gpu.json
+    volumes:
+      - /srv/cityu-gpu/grafana/data:/var/lib/grafana
+      - /srv/cityu-gpu/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "127.0.0.1:{{ cityu_gpu_grafana_local_port }}:3000"
+    logging:
+      driver: local

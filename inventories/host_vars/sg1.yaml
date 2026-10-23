@@ -68,3 +68,12 @@ file_edit_mcp_key: /etc/nginx/tls/cloudflare/myl.moe.key
 webobsidian_domain: note.myl.moe
 webobsidian_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
 webobsidian_key: /etc/nginx/tls/cloudflare/myl.moe.key
+cityu_gpu_domain: cityu-gpu.myl.moe
+cityu_gpu_cert: /etc/nginx/tls/cloudflare/myl.moe.pem
+cityu_gpu_key: /etc/nginx/tls/cloudflare/myl.moe.key
+# The exporter endpoints on the cityu machines, as literal tailnet addresses.
+# Mylnet and CityU are separate admin domains; this stays a literal endpoint
+# the same way cityu_print_socks_host does, never a hostvars cross-reference.
+cityu_gpu_exporters:
+  cs11369a: 100.104.99.124
+  cs659b: 100.67.212.32

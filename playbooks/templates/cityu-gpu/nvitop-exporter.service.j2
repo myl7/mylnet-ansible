@@ -1,0 +1,15 @@
+[Unit]
+Description=nvitop Prometheus exporter for the GPU panel
+Documentation=https://github.com/XuehaiPan/nvitop
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+User=nvitop-exporter
+ExecStart=/opt/nvitop-exporter/bin/nvitop-exporter --bind-address {{ tailnet_ip }} --port {{ cityu_gpu_exporter_port }} --hostname {{ inventory_hostname }} --interval 1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

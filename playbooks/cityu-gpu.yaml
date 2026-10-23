@@ -1,0 +1,475 @@
+---
+# The GPU panel for the two cityu servers, cs11369a and cs659b.
+#
+# Architecture:
+#   - cityu hosts run nvitop-exporter (systemd, tailnet-bound :8000), a tiny
+#     NVML+psutil exporter whose per-process metrics already carry usernames.
+#   - sg1 runs Prometheus (1s scrape over the tailnet) and Grafana in one
+#     compose stack, published on loopback only.
+#   - sg1 nginx publishes it at https://cityu-gpu.myl.moe behind basic auth
+#     (shared `lab` account), exactly like the cityu-print site.
+#
+# Mylnet and CityU are separate admin domains: sg1 reaches the exporters via
+# the literal tailnet addresses in host_vars/sg1.yaml (cityu_gpu_exporters),
+# never hostvars cross-references into the cityu group.
+#
+# Manual prerequisites, see docs/cityu-gpu.md:
+#   - the cityu-gpu.myl.moe DNS record (proxied) pointing at sg1,
+#   - secrets/htpasswd/cityu-gpu and the two cityu_gpu_* secrets.
+
+- name: Check the cityu hosts
+  hosts: cityu
+  gather_facts: false
+
+  vars:
+    cityu_gpu_exporter_port: 8000
+
+  tasks:
+    - name: Read listening sockets
+      ansible.builtin.command:
+        cmd: ss -tln
+      register: cityu_gpu_listen
+      changed_when: false
+
+    - name: Check cityu_gpu_exporter_port
+      ansible.builtin.assert:
+        that:
+          - cityu_gpu_listen.stdout is not search(tailnet_ip ~ ':' ~ cityu_gpu_exporter_port ~ '\b')
+        fail_msg: >-
+          {{ tailnet_ip }}:{{ cityu_gpu_exporter_port }} is already in use on
+          {{ inventory_hostname }}; set cityu_gpu_exporter_port elsewhere.
+        quiet: true
+
+- name: Run the nvitop exporter
+  hosts: cityu
+  become: true
+
+  vars:
+    cityu_gpu_exporter_port: 8000
+
+  tasks:
+    # Another session may hold the dpkg lock; python3-venv is already present
+    # on both hosts, so this is usually a no-op that just needs to get through.
+    - name: Install python3-venv
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+      register: cityu_gpu_apt
+      retries: 6
+      delay: 20
+      until: cityu_gpu_apt is succeeded
+
+    - name: Create the nvitop-exporter user
+      ansible.builtin.user:
+        name: nvitop-exporter
+        system: true
+        groups: video
+        append: true
+
+    - name: Install nvitop-exporter into a venv
+      ansible.builtin.pip:
+        name: nvitop-exporter
+        state: present
+        virtualenv: /opt/nvitop-exporter
+        virtualenv_command: /usr/bin/python3 -m venv
+
+    - name: Render the nvitop-exporter unit
+      ansible.builtin.template:
+        src: cityu-gpu/nvitop-exporter.service.j2
+        dest: /etc/systemd/system/nvitop-exporter.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart nvitop-exporter
+
+    - name: Create the unit drop-in dir
+      ansible.builtin.file:
+        path: /etc/systemd/system/nvitop-exporter.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Harden the nvitop-exporter unit
+      ansible.builtin.copy:
+        src: systemd/hardening.conf
+        dest: /etc/systemd/system/nvitop-exporter.service.d/hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart nvitop-exporter
+
+    - name: Start nvitop-exporter
+      ansible.builtin.systemd_service:
+        name: nvitop-exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Verify the exporter
+      when: not ansible_check_mode
+      block:
+        - name: Read exporter metrics
+          ansible.builtin.uri:
+            url: "http://{{ tailnet_ip }}:{{ cityu_gpu_exporter_port }}/metrics"
+            use_proxy: false
+            return_content: true
+          register: cityu_gpu_metrics
+          until:
+            - cityu_gpu_metrics.status == 200
+            - "'gpu_utilization_Percentage' in cityu_gpu_metrics.content"
+          retries: 12
+          delay: 5
+
+        - name: Read exporter version
+          ansible.builtin.command:
+            argv:
+              - /opt/nvitop-exporter/bin/nvitop-exporter
+              - --version
+          register: cityu_gpu_exporter_version
+          changed_when: false
+
+        - name: Record exporter version
+          ansible.builtin.debug:
+            msg: "{{ inventory_hostname }} runs {{ cityu_gpu_exporter_version.stdout | trim }}"
+
+  handlers:
+    - name: Restart nvitop-exporter
+      ansible.builtin.systemd_service:
+        name: nvitop-exporter
+        state: restarted
+        daemon_reload: true
+
+- name: Deploy the panel on sg1
+  hosts: sg1
+
+  vars_files:
+    - secrets/secrets.yaml
+
+  vars:
+    stack_dir: /opt/stacks/cityu-gpu
+    cityu_gpu_exporter_port: 8000
+    cityu_gpu_prometheus_local_port: 50020
+    cityu_gpu_grafana_local_port: 50019
+
+  pre_tasks:
+    - name: Check cityu_gpu_domain, cityu_gpu_cert, cityu_gpu_key, and cityu_gpu_exporters
+      ansible.builtin.assert:
+        that:
+          - cityu_gpu_domain is defined
+          - cityu_gpu_cert is defined
+          - cityu_gpu_key is defined
+          - cityu_gpu_exporters is defined
+        fail_msg: "Set cityu_gpu_domain, cityu_gpu_cert, cityu_gpu_key and cityu_gpu_exporters in host_vars/sg1.yaml"
+        quiet: true
+
+    - name: Check cityu_gpu_grafana_admin_password and cityu_gpu_panel_password
+      ansible.builtin.assert:
+        that:
+          - cityu_gpu_grafana_admin_password is defined
+          - cityu_gpu_panel_password is defined
+        fail_msg: "Set cityu_gpu_grafana_admin_password and cityu_gpu_panel_password in secrets.yaml"
+        quiet: true
+
+    - name: Check the htpasswd file exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/secrets/htpasswd/cityu-gpu"
+      register: cityu_gpu_htpasswd
+      delegate_to: localhost
+      changed_when: false
+
+    - name: Fail without an htpasswd file
+      ansible.builtin.assert:
+        that:
+          - cityu_gpu_htpasswd.stat.exists
+        fail_msg: "Create playbooks/secrets/htpasswd/cityu-gpu, the site is public without it"
+        quiet: true
+
+  tasks:
+    - name: Create stack dir
+      ansible.builtin.file:
+        path: "{{ stack_dir }}"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0755"
+
+    - name: Create data dirs
+      become: true
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.owner }}"
+        mode: "0755"
+      loop:
+        # prometheus runs as nobody (65534), grafana as uid 472
+        - path: /srv/cityu-gpu/prometheus
+          owner: "65534"
+        - path: /srv/cityu-gpu/grafana/data
+          owner: "472"
+        - path: /srv/cityu-gpu/grafana/data/dashboards
+          owner: root
+        - path: /srv/cityu-gpu/grafana/provisioning/datasources
+          owner: root
+        - path: /srv/cityu-gpu/grafana/provisioning/dashboards
+          owner: root
+
+    - name: Render compose file
+      ansible.builtin.template:
+        src: cityu-gpu/compose.yaml.j2
+        dest: "{{ stack_dir }}/compose.yaml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Render prometheus config
+      ansible.builtin.template:
+        src: cityu-gpu/prometheus.yml.j2
+        dest: "{{ stack_dir }}/prometheus.yml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
+    - name: Copy the Grafana datasource provisioning
+      become: true
+      ansible.builtin.copy:
+        src: cityu-gpu/grafana/provisioning/datasources/prometheus.yml
+        dest: /srv/cityu-gpu/grafana/provisioning/datasources/prometheus.yml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Copy the Grafana dashboard provider
+      become: true
+      ansible.builtin.copy:
+        src: cityu-gpu/grafana/provisioning/dashboards/provider.yml
+        dest: /srv/cityu-gpu/grafana/provisioning/dashboards/provider.yml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Copy the Grafana dashboard
+      become: true
+      ansible.builtin.copy:
+        src: cityu-gpu/grafana/dashboards/cityu-gpu.json
+        dest: /srv/cityu-gpu/grafana/data/dashboards/cityu-gpu.json
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start containers
+      community.docker.docker_compose_v2:
+        project_src: "{{ stack_dir }}"
+        state: present
+        remove_orphans: true
+        pull: always
+
+    - name: Create htpasswd dir
+      become: true
+      ansible.builtin.file:
+        path: /etc/nginx/htpasswd
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Write htpasswd
+      become: true
+      ansible.builtin.copy:
+        src: secrets/htpasswd/cityu-gpu
+        dest: /etc/nginx/htpasswd/cityu-gpu
+        owner: root
+        group: www-data
+        mode: "0640"
+      notify: Reload nginx
+
+    - name: Render nginx site
+      become: true
+      ansible.builtin.template:
+        src: cityu-gpu/cityu-gpu.nginx.j2
+        dest: /etc/nginx/sites-available/cityu-gpu
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable nginx site
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/cityu-gpu
+        dest: /etc/nginx/sites-enabled/cityu-gpu
+        state: link
+      notify: Reload nginx
+
+    - name: Apply nginx changes before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify the panel stack
+      when: not ansible_check_mode
+      block:
+        - name: Read Prometheus readiness
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cityu_gpu_prometheus_local_port }}/-/ready"
+            use_proxy: false
+          register: cityu_gpu_prom_ready
+          until: cityu_gpu_prom_ready.status == 200
+          retries: 12
+          delay: 5
+
+        - name: Read Grafana health
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cityu_gpu_grafana_local_port }}/api/health"
+            use_proxy: false
+            return_content: true
+          register: cityu_gpu_grafana_health
+          until: cityu_gpu_grafana_health.status == 200
+          retries: 12
+          delay: 5
+
+        - name: Read Prometheus scrape targets
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cityu_gpu_prometheus_local_port }}/api/v1/targets"
+            use_proxy: false
+            return_content: true
+          register: cityu_gpu_targets
+          until: cityu_gpu_targets.status == 200
+          retries: 12
+          delay: 5
+
+        - name: Check both exporters scrape as up
+          ansible.builtin.assert:
+            that:
+              - >-
+                cityu_gpu_targets.json.data.activeTargets
+                | selectattr('health', 'equalto', 'up')
+                | list | length == cityu_gpu_exporters | length
+            fail_msg: "Prometheus does not see both cityu exporters as up; check tailnet reachability and ACLs from sg1"
+            quiet: true
+
+        - name: Read Prometheus build info
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cityu_gpu_prometheus_local_port }}/api/v1/status/buildinfo"
+            use_proxy: false
+            return_content: true
+          register: cityu_gpu_prom_build
+          until: cityu_gpu_prom_build.status == 200
+          retries: 12
+          delay: 5
+
+        - name: Read pulled Prometheus image ID
+          ansible.builtin.command:
+            argv:
+              - docker
+              - image
+              - inspect
+              - --format
+              - "{{ '{{.Id}}' }}"
+              - prom/prometheus:latest
+          register: cityu_gpu_prom_image
+          changed_when: false
+
+        - name: Read pulled Grafana image ID
+          ansible.builtin.command:
+            argv:
+              - docker
+              - image
+              - inspect
+              - --format
+              - "{{ '{{.Id}}' }}"
+              - grafana/grafana:latest
+          register: cityu_gpu_grafana_image
+          changed_when: false
+
+        - name: Read running Prometheus image ID
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ stack_dir }}"
+              - ps
+              - -q
+              - prometheus
+          register: cityu_gpu_prom_cid
+          changed_when: false
+
+        - name: Read running Grafana image ID
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ stack_dir }}"
+              - ps
+              - -q
+              - grafana
+          register: cityu_gpu_grafana_cid
+          changed_when: false
+
+        - name: Read running image IDs
+          ansible.builtin.command:
+            argv:
+              - docker
+              - inspect
+              - --format
+              - "{{ '{{.Image}}' }}"
+              - "{{ item }}"
+          loop:
+            - "{{ cityu_gpu_prom_cid.stdout | trim }}"
+            - "{{ cityu_gpu_grafana_cid.stdout | trim }}"
+          register: cityu_gpu_running_images
+          changed_when: false
+
+        - name: Check running images match pulled tags
+          ansible.builtin.assert:
+            that:
+              - cityu_gpu_running_images.results[0].stdout | trim == cityu_gpu_prom_image.stdout | trim
+              - cityu_gpu_running_images.results[1].stdout | trim == cityu_gpu_grafana_image.stdout | trim
+            fail_msg: "A panel container is not running the pulled image"
+            quiet: true
+
+        - name: Record running panel versions
+          ansible.builtin.debug:
+            msg:
+              grafana_version: "{{ cityu_gpu_grafana_health.json.version }}"
+              grafana_image_id: "{{ cityu_gpu_running_images.results[1].stdout | trim }}"
+              prometheus_version: "{{ cityu_gpu_prom_build.json.data.version }}"
+              prometheus_image_id: "{{ cityu_gpu_running_images.results[0].stdout | trim }}"
+
+  handlers:
+    - name: Import docker handlers
+      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
+
+    - name: Import nginx handlers
+      ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
+
+- name: Verify the public panel
+  hosts: sg1
+  gather_facts: false
+
+  vars_files:
+    - secrets/secrets.yaml
+
+  tasks:
+    - name: Check the panel rejects anonymous requests
+      when: not ansible_check_mode
+      ansible.builtin.uri:
+        url: "https://{{ cityu_gpu_domain }}/"
+        use_proxy: false
+        status_code: 401
+
+    - name: Check the panel serves the shared account
+      when: not ansible_check_mode
+      ansible.builtin.uri:
+        url: "https://{{ cityu_gpu_domain }}/"
+        use_proxy: false
+        url_username: cityu
+        url_password: "{{ cityu_gpu_panel_password }}"
+        status_code: 200
+
+    - name: Record the panel URL
+      ansible.builtin.debug:
+        msg: "Panel live at https://{{ cityu_gpu_domain }}/ (user cityu)"

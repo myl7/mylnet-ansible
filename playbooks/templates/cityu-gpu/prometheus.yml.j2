@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 1s
+
+scrape_configs:
+  - job_name: cityu-gpu
+    static_configs:
+      - targets:
+{% for host, ip in (cityu_gpu_exporters | dictsort) %}
+        - "{{ ip }}:{{ cityu_gpu_exporter_port }}"
+{% endfor %}
