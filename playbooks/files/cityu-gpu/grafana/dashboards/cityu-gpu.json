@@ -38,7 +38,7 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 6,
+        "w": 8,
         "x": 0,
         "y": 0
       },
@@ -98,8 +98,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 5,
-        "x": 6,
+        "w": 8,
+        "x": 8,
         "y": 0
       },
       "id": 2,
@@ -160,8 +160,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 7,
-        "x": 11,
+        "w": 8,
+        "x": 16,
         "y": 0
       },
       "id": 3,
@@ -228,7 +228,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "显存已用 MiB"
+              "options": "显存 MiB"
             },
             "properties": [
               {
@@ -269,7 +269,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "gpu_utilization_Percentage",
+          "expr": "label_join(gpu_utilization_Percentage, \"gpu\", \"-\", \"hostname\", \"index\")",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -281,7 +281,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "gpu_memory_used_MiB",
+          "expr": "sum by (gpu) (label_join(gpu_memory_used_MiB, \"gpu\", \"-\", \"hostname\", \"index\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -293,7 +293,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "gpu_memory_total_MiB",
+          "expr": "sum by (gpu) (label_join(gpu_memory_total_MiB, \"gpu\", \"-\", \"hostname\", \"index\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -305,7 +305,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "gpu_temperature_C",
+          "expr": "sum by (gpu) (label_join(gpu_temperature_C, \"gpu\", \"-\", \"hostname\", \"index\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -315,8 +315,11 @@
       "title": "逐卡状态",
       "transformations": [
         {
-          "id": "merge",
-          "options": {}
+          "id": "joinByField",
+          "options": {
+            "byField": "gpu",
+            "mode": "outer"
+          }
         },
         {
           "id": "organize",
@@ -324,6 +327,8 @@
             "excludeByName": {
               "Time": true,
               "__name__": true,
+              "devicename": true,
+              "gpu": true,
               "instance": true,
               "job": true,
               "uuid": true
@@ -331,18 +336,16 @@
             "indexByName": {
               "hostname": 0,
               "index": 1,
-              "devicename": 2,
-              "A": 3,
-              "B": 4,
-              "C": 5,
-              "D": 6
+              "Value #A": 2,
+              "Value #B": 3,
+              "Value #C": 4,
+              "Value #D": 5
             },
             "renameByName": {
-              "A": "利用率 %",
-              "B": "显存已用 MiB",
-              "C": "显存总量 MiB",
-              "D": "温度 °C",
-              "devicename": "型号",
+              "Value #A": "利用率 %",
+              "Value #B": "显存 MiB",
+              "Value #C": "总量 MiB",
+              "Value #D": "温度 °C",
               "hostname": "主机",
               "index": "卡"
             }
@@ -356,7 +359,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "占用显卡的每个用户和进程。SM 采样对个别进程不可用属正常。",
+      "description": "占用显卡的每个用户和进程。",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -402,26 +405,10 @@
           "instant": true,
           "legendFormat": "__auto",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "process_gpu_sm_utilization_Percentage",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "refId": "B"
         }
       ],
       "title": "逐用户占用",
       "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
         {
           "id": "organize",
           "options": {
@@ -438,12 +425,10 @@
               "index": 1,
               "username": 2,
               "pid": 3,
-              "A": 4,
-              "B": 5
+              "Value": 4
             },
             "renameByName": {
-              "A": "GPU 显存 MiB",
-              "B": "SM %",
+              "Value": "GPU 显存 MiB",
               "hostname": "主机",
               "index": "卡",
               "pid": "PID",

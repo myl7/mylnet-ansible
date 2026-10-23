@@ -6,8 +6,8 @@
 #     NVML+psutil exporter whose per-process metrics already carry usernames.
 #   - sg1 runs Prometheus (1s scrape over the tailnet) and Grafana in one
 #     compose stack, published on loopback only.
-#   - sg1 nginx publishes it at https://cityu-gpu.myl.moe behind basic auth
-#     (shared `lab` account), exactly like the cityu-print site.
+#   - sg1 nginx publishes it at https://cityu-gpu.myl.moe; auth is Grafana's
+#     own login page (shared `cityu` viewer account), not nginx basic auth.
 #
 # Mylnet and CityU are separate admin domains: sg1 reaches the exporters via
 # the literal tailnet addresses in host_vars/sg1.yaml (cityu_gpu_exporters),
@@ -15,7 +15,7 @@
 #
 # Manual prerequisites, see docs/cityu-gpu.md:
 #   - the cityu-gpu.myl.moe DNS record (proxied) pointing at sg1,
-#   - secrets/htpasswd/cityu-gpu and the two cityu_gpu_* secrets.
+#   - the two cityu_gpu_* secrets.
 
 - name: Check the cityu hosts
   hosts: cityu
@@ -171,20 +171,6 @@
         fail_msg: "Set cityu_gpu_grafana_admin_password and cityu_gpu_panel_password in secrets.yaml"
         quiet: true
 
-    - name: Check the htpasswd file exists
-      ansible.builtin.stat:
-        path: "{{ playbook_dir }}/secrets/htpasswd/cityu-gpu"
-      register: cityu_gpu_htpasswd
-      delegate_to: localhost
-      changed_when: false
-
-    - name: Fail without an htpasswd file
-      ansible.builtin.assert:
-        that:
-          - cityu_gpu_htpasswd.stat.exists
-        fail_msg: "Create playbooks/secrets/htpasswd/cityu-gpu, the site is public without it"
-        quiet: true
-
   tasks:
     - name: Create stack dir
       ansible.builtin.file:
@@ -267,25 +253,6 @@
         remove_orphans: true
         pull: always
 
-    - name: Create htpasswd dir
-      become: true
-      ansible.builtin.file:
-        path: /etc/nginx/htpasswd
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-
-    - name: Write htpasswd
-      become: true
-      ansible.builtin.copy:
-        src: secrets/htpasswd/cityu-gpu
-        dest: /etc/nginx/htpasswd/cityu-gpu
-        owner: root
-        group: www-data
-        mode: "0640"
-      notify: Reload nginx
-
     - name: Render nginx site
       become: true
       ansible.builtin.template:
@@ -328,6 +295,59 @@
           until: cityu_gpu_grafana_health.status == 200
           retries: 12
           delay: 5
+
+        - name: Check the Grafana viewer user
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cityu_gpu_grafana_local_port }}/api/users/search?query=cityu"
+            use_proxy: false
+            url_username: admin
+            url_password: "{{ cityu_gpu_grafana_admin_password }}"
+            force_basic_auth: true
+          register: cityu_gpu_viewer_search
+          changed_when: false
+
+        - name: Create the Grafana viewer user
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cityu_gpu_grafana_local_port }}/api/admin/users"
+            use_proxy: false
+            url_username: admin
+            url_password: "{{ cityu_gpu_grafana_admin_password }}"
+            force_basic_auth: true
+            method: POST
+            body_format: json
+            body:
+              name: cityu
+              email: cityu-gpu@myl.moe
+              login: cityu
+              password: "{{ cityu_gpu_panel_password }}"
+            status_code:
+              - 200
+          register: cityu_gpu_viewer_created
+          when: cityu_gpu_viewer_search.json.totalCount == 0
+
+        - name: Record the Grafana viewer user id
+          ansible.builtin.set_fact:
+            cityu_gpu_viewer_id: >-
+              {{ cityu_gpu_viewer_created.json.id
+                 if cityu_gpu_viewer_search.json.totalCount == 0
+                 else cityu_gpu_viewer_search.json.users[0].id }}
+
+        - name: Set the initial Grafana viewer password
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cityu_gpu_grafana_local_port }}/api/admin/users/{{ cityu_gpu_viewer_id }}/password"
+            use_proxy: false
+            url_username: admin
+            url_password: "{{ cityu_gpu_grafana_admin_password }}"
+            force_basic_auth: true
+            method: PUT
+            body_format: json
+            body:
+              password: "{{ cityu_gpu_panel_password }}"
+            status_code:
+              - 200
+          # Only on creation: this API revokes every active session of the
+          # user, so running it on every deploy would log the lab out.
+          when: cityu_gpu_viewer_search.json.totalCount == 0
 
         - name: Read Prometheus scrape targets
           ansible.builtin.uri:
@@ -457,19 +477,40 @@
     - name: Check the panel rejects anonymous requests
       when: not ansible_check_mode
       ansible.builtin.uri:
-        url: "https://{{ cityu_gpu_domain }}/"
+        url: "https://{{ cityu_gpu_domain }}/api/user"
         use_proxy: false
         status_code: 401
+
+    - name: Check the panel login issues a session
+      when: not ansible_check_mode
+      ansible.builtin.uri:
+        url: "https://{{ cityu_gpu_domain }}/login"
+        use_proxy: false
+        method: POST
+        body_format: json
+        body:
+          user: cityu
+          password: "{{ cityu_gpu_panel_password }}"
+        status_code: 200
+      register: cityu_gpu_login
+
+    - name: Check the login issued a session cookie
+      ansible.builtin.assert:
+        that:
+          - "'grafana_session=' in (cityu_gpu_login.set_cookie | default(''))"
+        fail_msg: "The login response carries no grafana_session cookie"
+        quiet: true
 
     - name: Check the panel serves the shared account
       when: not ansible_check_mode
       ansible.builtin.uri:
-        url: "https://{{ cityu_gpu_domain }}/"
+        url: "https://{{ cityu_gpu_domain }}/api/user"
         use_proxy: false
         url_username: cityu
         url_password: "{{ cityu_gpu_panel_password }}"
+        force_basic_auth: true
         status_code: 200
 
     - name: Record the panel URL
       ansible.builtin.debug:
-        msg: "Panel live at https://{{ cityu_gpu_domain }}/ (user cityu)"
+        msg: "Panel live at https://{{ cityu_gpu_domain }}/ (Grafana login cityu)"

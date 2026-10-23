@@ -115,8 +115,8 @@ class ComposeTest(unittest.TestCase):
         self.assertEqual(grafana["image"], "grafana/grafana:latest")
         self.assertEqual(grafana["ports"], ["127.0.0.1:50019:3000"])
         env = grafana["environment"]
-        self.assertIn("GF_AUTH_ANONYMOUS_ENABLED=true", env)
-        self.assertIn("GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer", env)
+        # No anonymous access: the panel is public but behind a real login.
+        self.assertIn("GF_USERS_ALLOW_SIGN_UP=false", env)
         self.assertIn("GF_SERVER_ROOT_URL=https://cityu-gpu.myl.moe", env)
         self.assertIn(
             "GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/cityu-gpu.json",
@@ -137,7 +137,9 @@ class NginxSiteTest(unittest.TestCase):
         )
         self.assertIn("server_name cityu-gpu.myl.moe;", site)
         self.assertIn("ssl_certificate /etc/nginx/tls/cloudflare/myl.moe.pem;", site)
-        self.assertIn("auth_basic_user_file /etc/nginx/htpasswd/cityu-gpu;", site)
+        # Auth lives in Grafana's own login; nginx basic auth in front of it
+        # caused password-prompt storms on every auto refresh.
+        self.assertNotIn("auth_basic", site)
         self.assertIn("proxy_pass http://127.0.0.1:50019;", site)
         self.assertIn("include snippets/rproxy.conf;", site)
 
@@ -183,6 +185,34 @@ class DashboardTest(unittest.TestCase):
         self.assertIn("gpu_memory_used_MiB < 2048", idle)
         self.assertIn("gpu_utilization_Percentage < 10", idle)
         self.assertIn("or vector(0)", idle)
+
+    def test_table_value_columns_are_renamed(self) -> None:
+        # Multi-target tables name their value fields "Value #A"; a
+        # single-target table names its only value field "Value". The organize
+        # transform must rename whichever appears, or the header stays
+        # unreadable.
+        tables = [
+            panel for panel in self.dashboard["panels"] if panel["type"] == "table"
+        ]
+        for table in tables:
+            organize = next(
+                t
+                for t in table["transformations"]
+                if t["id"] == "organize"
+            )
+            renamed = organize["options"]["renameByName"]
+            self.assertTrue(
+                any(key.startswith("Value") for key in renamed),
+                "no value column rename found",
+            )
+            self.assertFalse(
+                [
+                    key
+                    for key in renamed
+                    if key.startswith("Value") and renamed[key] == key
+                ],
+                "a Value field was not renamed",
+            )
 
     def test_datasource_uid_matches_provisioning(self) -> None:
         with (

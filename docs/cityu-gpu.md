@@ -15,10 +15,12 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
 - sg1 跑 compose 栈(镜像浮动 tag,`restart: always`):
   - Prometheus `127.0.0.1:50020`,每 1s 抓两台 exporter,TSDB 留 30 天,
     数据在 `/srv/cityu-gpu/prometheus`;
-  - Grafana `127.0.0.1:50019`,匿名 Viewer,首页即 CityU GPU dashboard,
+  - Grafana `127.0.0.1:50019`,登录后首页即 CityU GPU dashboard,
     数据在 `/srv/cityu-gpu/grafana`。
 - sg1 nginx 站点 `cityu-gpu.myl.moe`(Cloudflare proxied,泛域名 origin 证书)
-  挂 basic auth(共享账号 `cityu`,凭据与 cityu-print 相同)反代到 Grafana。公网只暴露这一个入口。
+  纯反代到 Grafana。认证在 Grafana 自己的登录页:共享 viewer 账号 `cityu`
+  (***REMOVED***),会话 cookie 默认 30 天,密码只在 playbook
+  首次建号时写入。公网只暴露这一个入口。
 
 边界:Mylnet 与 CityU 两个管理域,sg1 通过 `host_vars/sg1.yaml` 里的字面量
 `cityu_gpu_exporters`(host → tailnet IP)抓取 exporter,不做跨组 hostvars
@@ -32,15 +34,16 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
 | cityu 两台 `/opt/nvitop-exporter/` | venv |
 | sg1 `/opt/stacks/cityu-gpu/{compose.yaml,prometheus.yml}` | 栈配置 |
 | sg1 `/srv/cityu-gpu/` | TSDB 与 Grafana 数据、dashboard JSON、provisioning |
-| sg1 `/etc/nginx/sites-available/cityu-gpu` | 站点 |
-| sg1 `/etc/nginx/htpasswd/cityu-gpu` | basic auth(bcrypt cost 5) |
+| sg1 `/etc/nginx/sites-available/cityu-gpu` | 站点(纯反代) |
 
 ## 先决(手动)
 
 - DNS:Cloudflare 里 `cityu-gpu.myl.moe` A 记录指向 sg1 公网 IP,proxied。
-- secrets:`secrets/htpasswd/cityu-gpu`(`htpasswd -cbBC 5 <path> cityu <pw>`)与
-  `secrets.yaml` 的 `cityu_gpu_grafana_admin_password`、
-  `cityu_gpu_panel_password`(后者供 playbook 验证 200,改密码时两处同步)。
+- secrets:`secrets.yaml` 的 `cityu_gpu_grafana_admin_password`(Grafana 管理员)
+  与 `cityu_gpu_panel_password`(共享 viewer 账号 `cityu` 的登录密码,只在
+  playbook 首次建号时写入)。轮换密码在 Grafana 里用 admin 改,不要重跑
+  playbook 期望它生效;改密的 admin API 会吊销该用户全部会话,所以 playbook
+  只在建号时调用一次。
 - sg1 能达两台 exporter 的 tailnet 地址(tailnet ACL 需放行 sg1 → 100.x:8000)。
 
 ## Operations
@@ -57,12 +60,18 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
 
 ## Quirks
 
+- 不用 nginx basic auth:面板 5 秒自动刷新时,浏览器(尤其 iOS Safari)会对
+  XHR 反复弹出 basic auth 输入框,完全无法使用。Grafana 原生登录发会话
+  cookie,刷新无感。
+- 表格面板多查询合并后,值列的原始字段名是 `Value #A` 形态,organize
+  transform 必须按这个键名改名,否则列头不可读(测试有回归断言)。
+
 - cs659b 的 127.0.0.1:8000 已被别的服务占用;exporter 绑 tailnet 地址,
   不冲突。playbook 的端口检查只看 tailnet 地址上的绑定。
 - 个别 GPU 进程的 SM 采样返回不可用(NVML 对部分进程不给计算采样),面板上
   SM 列显示空属正常;显存归因不受影响,同同学面板的「不可用」标注。
-- 监控数据(含进程命令行指标)落在 sg1;公网面板有 basic auth,但 metrics
-  端点只在 tailnet 内。将来若对命令行暴露有顾虑,可收紧 Grafana 匿名角色。
+- 监控数据(含进程命令行指标)落在 sg1;公网面板要求 Grafana 登录(匿名
+  访问关闭),metrics 端点只在 tailnet 内。
 - 通知(空闲邮件、可订阅列表)是后续单独的工作,现在未部署。secrets 里的
   `system_smtp_*`(Mailgun)届时可直接复用。
 
@@ -82,6 +91,6 @@ sudo userdel nvitop-exporter
 # sg1
 docker compose --project-directory /opt/stacks/cityu-gpu down
 sudo rm -rf /opt/stacks/cityu-gpu /srv/cityu-gpu
-sudo rm -f /etc/nginx/sites-enabled/cityu-gpu /etc/nginx/sites-available/cityu-gpu /etc/nginx/htpasswd/cityu-gpu
+sudo rm -f /etc/nginx/sites-enabled/cityu-gpu /etc/nginx/sites-available/cityu-gpu
 sudo nginx -t && sudo nginx -s reload
 ```

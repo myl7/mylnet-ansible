@@ -21,9 +21,10 @@ services:
       - GF_SERVER_ROOT_URL=https://{{ cityu_gpu_domain }}
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD={{ cityu_gpu_grafana_admin_password | replace("$", "$$") }}
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Default 10m: rotation does a full-page /login redirect dance, which
+      # bounces viewers mid-session. Once a day is plenty for this panel.
+      - GF_AUTH_TOKEN_ROTATION_INTERVAL_MINUTES=1440
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/cityu-gpu.json
     volumes:
       - /srv/cityu-gpu/grafana/data:/var/lib/grafana
