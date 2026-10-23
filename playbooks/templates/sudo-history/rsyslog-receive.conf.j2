@@ -1,0 +1,11 @@
+# Managed by playbooks/sudo-history.yaml. Receive the sudo history the other
+# cityu hosts forward. The listener binds only this host's tailnet IP, so the
+# campus network cannot reach it, and AllowedSender rejects anything that is
+# not a cityu host anyway. Forwarded messages join the default ruleset, so
+# the programname rule in 30-sudo-history.conf files them into the merged
+# {{ sudo_history_log }} next to local events (hostname per line).
+{% set sudo_history_senders = groups['cityu'] | sort | reject('equalto', sudo_history_receiver) | list %}
+module(load="imtcp")
+input(type="imtcp" address="{{ tailnet_ip }}" port="{{ sudo_history_port }}")
+
+$AllowedSender TCP, {{ sudo_history_senders | map('extract', hostvars, 'tailnet_ip') | join(', ') }}

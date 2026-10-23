@@ -1,0 +1,13 @@
+# Managed by playbooks/sudo-history.yaml.
+{{ sudo_history_log }} {
+    weekly
+    rotate {{ sudo_history_rotate_keep }}
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        /usr/lib/rsyslog/rsyslog-rotate
+    endscript
+}

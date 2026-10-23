@@ -1,0 +1,233 @@
+---
+# sudo command history on the cityu GPU servers, for attribution: who ran
+# what with root privileges, when, and from where.
+#
+# Every sudo invocation already travels as an authpriv message (user, tty,
+# working directory, target user, full command). This playbook only re-files
+# them: each host keeps a dedicated /var/log/sudo.log, and every host except
+# the receiver also forwards its copy to cs659b over the tailnet, whose own
+# sudo.log becomes the merged history of both machines (hostname per line).
+# auth.log and syslog keep their copies - the routing rule has no stop - so
+# the usual auth trail and fail2ban are unchanged.
+#
+# Nothing here defends against a hostile root: a sudoer can edit or delete
+# these logs. The assumption is honest users who sometimes need to be asked
+# "who did this", not adversaries. Direct root logins and privilege paths
+# that bypass sudo are out of scope; auth.log and the journal still cover
+# the logins themselves.
+#
+# cs11369a runs a volatile journal (no /var/log/journal) holding ~100G in
+# /run: its sudo history dies on reboot, and the journal is far too large
+# to flush into the nearly full root partition. The playbook exports the
+# journal's sudo events to /var/log/sudo-journal-rescue.log once instead
+# (delete the file and re-run to refresh) and leaves the journal volatile;
+# sudo.log and the cs659b merged copy carry the history from here on.
+# cs659b's journal is already persistent and untouched.
+#
+# See docs/sudo-history.md for querying, retention and the manual cleanup
+# scope.
+- name: Check the cityu hosts
+  hosts: cityu
+  become: true
+
+  vars:
+    # The feature itself needs almost no space: a few KB of log lines a day
+    # and, worst case, a 10M forwarder queue. The floor only guards against
+    # a truly full disk silencing rsyslog writes. It stays low because
+    # cs11369a's root partition runs close to full.
+    sudo_history_min_root_free_mb: 512
+
+  pre_tasks:
+    - name: Read the journal persistence
+      ansible.builtin.stat:
+        path: /var/log/journal
+      register: sudo_history_journal_dir
+
+    - name: Set sudo history facts
+      ansible.builtin.set_fact:
+        sudo_history_journal_persistent: "{{ sudo_history_journal_dir.stat.exists }}"
+        sudo_history_root_free_mb: >-
+          {{ (ansible_facts['mounts']
+              | selectattr('mount', 'equalto', '/')
+              | map(attribute='size_available') | first) // (1024 * 1024) }}
+
+    - name: Check root free space
+      ansible.builtin.assert:
+        that:
+          - sudo_history_root_free_mb | int >= sudo_history_min_root_free_mb
+        fail_msg: >-
+          {{ inventory_hostname }} / has {{ sudo_history_root_free_mb }} MiB
+          free, under the {{ sudo_history_min_root_free_mb }} MiB floor; a
+          disk that tight silences rsyslog ***REMOVED***
+          ***REMOVED*** ***REMOVED*** - see
+          docs/sudo-history.md).
+        quiet: true
+
+# The receiver must listen before anyone forwards to it, and the free
+# strategy interleaves hosts within a play, so this is its own play.
+- name: Receive sudo history on cs659b
+  hosts: cs659b
+  become: true
+
+  vars:
+    sudo_history_receiver: cs659b
+    sudo_history_log: /var/log/sudo.log
+    sudo_history_port: 514
+
+  tasks:
+    - name: Install rsyslog
+      ansible.builtin.apt:
+        name: rsyslog
+        state: present
+
+    - name: Render the receiver config
+      ansible.builtin.template:
+        src: sudo-history/rsyslog-receive.conf.j2
+        dest: /etc/rsyslog.d/30-sudo-history-receive.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart rsyslog
+
+    # The template's own validate runs on a temp file in the deploy user's
+    # home, which rsyslogd's AppArmor profile cannot read. Validate the full
+    # effective config after the drop-in lands instead: failing here aborts
+    # the play before flush_handlers, so rsyslog never restarts into a bad
+    # config.
+    - name: Validate the rsyslog config
+      ansible.builtin.command:
+        cmd: /usr/sbin/rsyslogd -N1 -f /etc/rsyslog.conf
+      changed_when: false
+
+    - name: Apply pending config changes
+      ansible.builtin.meta: flush_handlers
+
+  handlers:
+    - name: Restart rsyslog
+      ansible.builtin.systemd_service:
+        name: rsyslog
+        state: restarted
+
+- name: Record sudo history
+  hosts: cityu
+  become: true
+
+  vars:
+    sudo_history_receiver: cs659b
+    sudo_history_log: /var/log/sudo.log
+    sudo_history_port: 514
+    sudo_history_rotate_keep: 52
+    sudo_history_rescue_log: /var/log/sudo-journal-rescue.log
+
+  tasks:
+    # The volatile journal on cs11369a holds the only sudo history back to
+    # August and dies on reboot. It is far too large to flush to disk, so
+    # the sudo events are exported instead; `creates` keeps the snapshot,
+    # delete the file and re-run for a fresher one before a reboot.
+    - name: Rescue sudo history from the volatile journal
+      ansible.builtin.shell:
+        cmd: umask 026 && journalctl -t sudo --no-pager -o short-iso > {{ sudo_history_rescue_log }}
+        creates: "{{ sudo_history_rescue_log }}"
+      when: not sudo_history_journal_persistent
+
+    - name: Install rsyslog
+      ansible.builtin.apt:
+        name: rsyslog
+        state: present
+
+    - name: Render the routing config
+      ansible.builtin.template:
+        src: sudo-history/rsyslog.conf.j2
+        dest: /etc/rsyslog.d/30-sudo-history.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart rsyslog
+
+    - name: Render the logrotate config
+      ansible.builtin.template:
+        src: sudo-history/logrotate.conf.j2
+        dest: /etc/logrotate.d/sudo-history
+        owner: root
+        group: root
+        mode: "0644"
+
+    # Same reason as the receiver play: validate the full config in place,
+    # before any restart can pick it up.
+    - name: Validate the rsyslog config
+      ansible.builtin.command:
+        cmd: /usr/sbin/rsyslogd -N1 -f /etc/rsyslog.conf
+      changed_when: false
+
+    - name: Apply pending config changes
+      ansible.builtin.meta: flush_handlers
+
+  handlers:
+    - name: Restart rsyslog
+      ansible.builtin.systemd_service:
+        name: rsyslog
+        state: restarted
+
+# A genuine sudo invocation by the login user; the log line it produces is
+# what the checks look for. The play runs without become so the event is
+# the user's own, not ansible's escalation.
+- name: Verify the local sudo history
+  hosts: cityu
+  become: false
+
+  vars:
+    sudo_history_log: /var/log/sudo.log
+
+  tasks:
+    # The checks need the deployed config, so they only run for real.
+    - name: Trigger a sudo event
+      ansible.builtin.command:
+        cmd: sudo -n true
+      when: not ansible_check_mode
+      changed_when: false
+
+    # The log is 0640 syslog:adm, so reading it back needs root; the sudo
+    # event above stays the user's own either way.
+    - name: Wait for the local sudo log
+      ansible.builtin.command:
+        cmd: 'grep -F "{{ ansible_user }} : TTY=" {{ sudo_history_log }}'
+      register: sudo_history_local
+      become: true
+      when: not ansible_check_mode
+      until: sudo_history_local.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false
+
+- name: Verify the merged sudo history
+  hosts: cs659b
+  become: true
+
+  vars:
+    sudo_history_log: /var/log/sudo.log
+
+  tasks:
+    # The checks need the deployed config, so they only run for real.
+    - name: Wait for both hosts in the merged log
+      ansible.builtin.command:
+        cmd: tail -n 20 {{ sudo_history_log }}
+      register: sudo_history_merged
+      when: not ansible_check_mode
+      until:
+        - "'cs11369a sudo:' in sudo_history_merged.stdout"
+        - "'cs659b sudo:' in sudo_history_merged.stdout"
+      retries: 12
+      delay: 5
+      changed_when: false
+
+    - name: Check the merged sudo history
+      ansible.builtin.assert:
+        that:
+          - "'cs11369a sudo:' in sudo_history_merged.stdout"
+          - "'cs659b sudo:' in sudo_history_merged.stdout"
+        fail_msg: >-
+          The merged {{ sudo_history_log }} on cs659b misses one of the
+          hosts; check rsyslog on both machines and the tailnet path
+          between them.
+        quiet: true
+      when: not ansible_check_mode

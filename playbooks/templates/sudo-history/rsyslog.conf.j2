@@ -1,0 +1,14 @@
+# Managed by playbooks/sudo-history.yaml. Every sudo message lands in a
+# dedicated file; auth.log and syslog keep receiving their copies too (the
+# rule has no stop), so the usual auth trail and fail2ban are unchanged.
+if $programname == 'sudo' then {
+    action(type="omfile" file="{{ sudo_history_log }}" fileOwner="syslog" fileGroup="adm" fileCreateMode="0640")
+{% if inventory_hostname != sudo_history_receiver %}
+    # Second copy on {{ sudo_history_receiver }}, merged there with its own
+    # sudo messages. The disk-assisted queue buffers while the receiver is
+    # down and retries forever; the local file above has the record either
+    # way.
+    action(type="omfwd" target="{{ hostvars[sudo_history_receiver].tailnet_ip }}" port="{{ sudo_history_port }}" protocol="tcp"
+        queue.type="LinkedList" queue.filename="sudo-history" queue.maxDiskSpace="10m" queue.saveOnShutdown="on" action.resumeRetryCount="-1")
+{% endif %}
+}
