@@ -1,0 +1,163 @@
+---
+# Kill GPU processes on the cityu hosts that hold a CUDA context without
+# computing: SIGTERM after gpu_idle_reaper_idle_seconds of observed idleness,
+# SIGKILL gpu_idle_reaper_grace_seconds later.
+#
+# Ships in dry-run (gpu_idle_reaper_dry_run: true): it logs "would kill" to
+# /var/log/gpu-idle-reaper.log and never signals. The per-process countdown
+# is exported on tailnet_ip:gpu_idle_reaper_port, scraped by the panel in
+# cityu-gpu.yaml.
+#
+# See docs/gpu-idle-reaper.md for the exact rule, its detection floor, and
+# the tailnet ACL prerequisite.
+
+- name: Check the cityu hosts
+  hosts: cityu
+  gather_facts: false
+
+  vars:
+    gpu_idle_reaper_port: 8001
+
+  tasks:
+    - name: Read listening sockets
+      ansible.builtin.command:
+        cmd: ss -tln
+      register: gpu_idle_reaper_listen
+      changed_when: false
+
+    - name: Read service states
+      ansible.builtin.service_facts:
+
+    # After the first deploy the reaper itself holds the port, so a listener
+    # only counts as foreign while the reaper is not running.
+    - name: Check gpu_idle_reaper_port
+      ansible.builtin.assert:
+        that:
+          - gpu_idle_reaper_listen.stdout is not search(tailnet_ip ~ ':' ~ gpu_idle_reaper_port ~ '\b')
+        fail_msg: >-
+          {{ tailnet_ip }}:{{ gpu_idle_reaper_port }} is already in use on
+          {{ inventory_hostname }}; set gpu_idle_reaper_port elsewhere.
+        quiet: true
+      when: ansible_facts.services['gpu-idle-reaper.service'].state | default('') != 'running'
+
+- name: Run the GPU idle reaper
+  hosts: cityu
+  become: true
+
+  vars:
+    gpu_idle_reaper_port: 8001
+    gpu_idle_reaper_idle_seconds: 86400
+    gpu_idle_reaper_grace_seconds: 60
+    gpu_idle_reaper_dry_run: true
+
+  tasks:
+    # Another session may hold the dpkg lock; python3-venv is already present
+    # on both hosts, so this is usually a no-op that just needs to get through.
+    - name: Install python3-venv
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+      register: gpu_idle_reaper_apt
+      retries: 6
+      delay: 20
+      until: gpu_idle_reaper_apt is succeeded
+
+    - name: Install nvidia-ml-py and prometheus-client into a venv
+      ansible.builtin.pip:
+        name:
+          - nvidia-ml-py
+          - prometheus-client
+        state: present
+        virtualenv: /opt/gpu-idle-reaper
+        virtualenv_command: /usr/bin/python3 -m venv
+
+    - name: Copy the reaper
+      ansible.builtin.copy:
+        src: gpu-idle-reaper/gpu_idle_reaper.py
+        dest: /opt/gpu-idle-reaper/gpu_idle_reaper.py
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Restart gpu-idle-reaper
+
+    - name: Render the gpu-idle-reaper unit
+      ansible.builtin.template:
+        src: gpu-idle-reaper/gpu-idle-reaper.service.j2
+        dest: /etc/systemd/system/gpu-idle-reaper.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart gpu-idle-reaper
+
+    - name: Create the unit drop-in dir
+      ansible.builtin.file:
+        path: /etc/systemd/system/gpu-idle-reaper.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Harden the gpu-idle-reaper unit
+      ansible.builtin.copy:
+        src: systemd/hardening.conf
+        dest: /etc/systemd/system/gpu-idle-reaper.service.d/hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart gpu-idle-reaper
+
+    - name: Copy the logrotate config
+      ansible.builtin.copy:
+        src: gpu-idle-reaper/logrotate.conf
+        dest: /etc/logrotate.d/gpu-idle-reaper
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start gpu-idle-reaper
+      ansible.builtin.systemd_service:
+        name: gpu-idle-reaper
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # Verify the code just copied, not the process it replaces.
+    - name: Apply reaper changes before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify the reaper
+      when: not ansible_check_mode
+      block:
+        - name: Read reaper metrics
+          ansible.builtin.uri:
+            url: "http://{{ tailnet_ip }}:{{ gpu_idle_reaper_port }}/metrics"
+            use_proxy: false
+            return_content: true
+          register: gpu_idle_reaper_metrics
+          until:
+            - gpu_idle_reaper_metrics.status == 200
+            - "'# TYPE gpu_idle_reaper_kill_in_seconds gauge' in gpu_idle_reaper_metrics.content"
+          retries: 12
+          delay: 5
+
+        - name: Read reaper package versions
+          ansible.builtin.command:
+            argv:
+              - /opt/gpu-idle-reaper/bin/python
+              - -c
+              - >-
+                import importlib.metadata as m;
+                print('nvidia-ml-py', m.version('nvidia-ml-py'), 'prometheus-client', m.version('prometheus-client'))
+          register: gpu_idle_reaper_versions
+          changed_when: false
+
+        - name: Record reaper package versions
+          ansible.builtin.debug:
+            msg: "{{ inventory_hostname }} runs {{ gpu_idle_reaper_versions.stdout | trim }}"
+
+  handlers:
+    - name: Restart gpu-idle-reaper
+      ansible.builtin.systemd_service:
+        name: gpu-idle-reaper
+        state: restarted
+        daemon_reload: true

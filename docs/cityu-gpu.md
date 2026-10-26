@@ -17,6 +17,8 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
     数据在 `/srv/cityu-gpu/prometheus`;
   - Grafana `127.0.0.1:50019`,登录后首页即 CityU GPU dashboard,
     数据在 `/srv/cityu-gpu/grafana`。
+- cityu 两台另跑 `gpu-idle-reaper` systemd 服务(root),绑 tailnet 地址 :8001,导出每个 GPU 进程离被结束还剩多久,Prometheus 用第二个 job `gpu-idle-reaper` 抓取,显示为「逐用户占用」表的 `kill 倒计时` 列。
+  规则、dry-run 与日志见 [gpu-idle-reaper.md](gpu-idle-reaper.md)。
 - sg1 nginx 站点 `cityu-gpu.myl.moe`(Cloudflare proxied,泛域名 origin 证书)
   纯反代到 Grafana。认证在 Grafana 自己的登录页:共享 viewer 账号 `cityu`
   (***REMOVED***),会话 cookie 默认 30 天,密码只在 playbook
@@ -44,7 +46,9 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
   playbook 首次建号时写入)。轮换密码在 Grafana 里用 admin 改,不要重跑
   playbook 期望它生效;改密的 admin API 会吊销该用户全部会话,所以 playbook
   只在建号时调用一次。
-- sg1 能达两台 exporter 的 tailnet 地址(tailnet ACL 需放行 sg1 → 100.x:8000)。
+- sg1 能达两台 exporter 的 tailnet 地址(tailnet ACL 需放行 sg1 → 100.x:8000,以及 gpu-idle-reaper 的 sg1 → 100.x:8001)。
+  2026-10-26 时现有规则已放行 sg1 访问两台的全部端口。若以后收窄,要保留 8001,否则 playbook 最后的 gpu-idle-reaper 抓取检查会失败,倒计时列为空。
+- 先跑 `playbooks/gpu-idle-reaper.yaml`,再跑本 playbook。
 
 ## Operations
 

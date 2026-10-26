@@ -8,3 +8,9 @@ scrape_configs:
 {% for host, ip in (cityu_gpu_exporters | dictsort) %}
         - "{{ ip }}:{{ cityu_gpu_exporter_port }}"
 {% endfor %}
+  - job_name: gpu-idle-reaper
+    static_configs:
+      - targets:
+{% for host, ip in (cityu_gpu_exporters | dictsort) %}
+        - "{{ ip }}:{{ gpu_idle_reaper_port }}"
+{% endfor %}

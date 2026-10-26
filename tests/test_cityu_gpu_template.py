@@ -21,6 +21,7 @@ FILES_DIR = PLAYBOOKS / "files" / "cityu-gpu"
 
 EXPORTERS = {"cs11369a": "100.104.99.124", "cs659b": "100.67.212.32"}
 EXPORTER_PORT = 8000
+REAPER_PORT = 8001
 PROM_LOCAL_PORT = 50020
 GRAFANA_LOCAL_PORT = 50019
 DOMAIN = "cityu-gpu.myl.moe"
@@ -28,7 +29,8 @@ CERT = "/etc/nginx/tls/cloudflare/myl.moe.pem"
 KEY = "/etc/nginx/tls/cloudflare/myl.moe.key"
 ADMIN_PASSWORD = "pa$$word"
 
-# Metric names exported by nvitop-exporter (units are part of the name).
+# Metric names exported by nvitop-exporter (units are part of the name), and
+# the countdown exported by gpu-idle-reaper.
 KNOWN_METRICS = {
     "gpu_utilization_Percentage",
     "gpu_memory_used_MiB",
@@ -37,6 +39,7 @@ KNOWN_METRICS = {
     "gpu_temperature_C",
     "process_gpu_memory_MiB",
     "process_gpu_sm_utilization_Percentage",
+    "gpu_idle_reaper_kill_in_seconds",
 }
 
 
@@ -79,15 +82,22 @@ class PrometheusConfigTest(unittest.TestCase):
                 "prometheus.yml.j2",
                 cityu_gpu_exporters=EXPORTERS,
                 cityu_gpu_exporter_port=EXPORTER_PORT,
+                gpu_idle_reaper_port=REAPER_PORT,
             )
         )
         assert config is not None
         self.assertEqual(config["global"]["scrape_interval"], "1s")
-        job = config["scrape_configs"][0]
-        self.assertEqual(job["job_name"], "cityu-gpu")
+        targets = {
+            job["job_name"]: job["static_configs"][0]["targets"]
+            for job in config["scrape_configs"]
+        }
+        # The playbook's scrape asserts filter activeTargets by these job names.
         self.assertEqual(
-            job["static_configs"][0]["targets"],
-            ["100.104.99.124:8000", "100.67.212.32:8000"],
+            targets,
+            {
+                "cityu-gpu": ["100.104.99.124:8000", "100.67.212.32:8000"],
+                "gpu-idle-reaper": ["100.104.99.124:8001", "100.67.212.32:8001"],
+            },
         )
 
 
@@ -172,7 +182,7 @@ class DashboardTest(unittest.TestCase):
             for panel in self.dashboard["panels"]
             for target in panel.get("targets", [])
         ]
-        self.assertGreaterEqual(len(exprs), 8)
+        self.assertGreaterEqual(len(exprs), 9)
         for expr in exprs:
             self.assertTrue(
                 any(metric in expr for metric in KNOWN_METRICS),
@@ -185,6 +195,35 @@ class DashboardTest(unittest.TestCase):
         self.assertIn("gpu_memory_used_MiB < 2048", idle)
         self.assertIn("gpu_utilization_Percentage < 10", idle)
         self.assertIn("or vector(0)", idle)
+
+    def test_user_table_joins_the_kill_countdown(self) -> None:
+        table = next(
+            panel for panel in self.dashboard["panels"] if panel["title"] == "逐用户占用"
+        )
+        exprs = {target["refId"]: target["expr"] for target in table["targets"]}
+        # Both sides must build proc from the same labels, or no row joins.
+        proc = 'label_join({}, "proc", "-", "hostname", "index", "pid")'
+        self.assertEqual(exprs["A"], proc.format("process_gpu_memory_MiB"))
+        self.assertEqual(
+            exprs["B"],
+            "sum by (proc) ({})".format(proc.format("gpu_idle_reaper_kill_in_seconds")),
+        )
+        self.assertEqual(
+            table["transformations"][0],
+            {"id": "joinByField", "options": {"byField": "proc", "mode": "outer"}},
+        )
+        organize = table["transformations"][1]["options"]
+        self.assertTrue(organize["excludeByName"]["proc"])
+        order = sorted(organize["indexByName"], key=organize["indexByName"].get)
+        self.assertEqual(
+            [organize["renameByName"][field] for field in order],
+            ["主机", "卡", "用户", "PID", "GPU 显存 MiB", "kill 倒计时"],
+        )
+        units = {
+            override["matcher"]["options"]: override["properties"]
+            for override in table["fieldConfig"]["overrides"]
+        }
+        self.assertEqual(units["kill 倒计时"], [{"id": "unit", "value": "dtdurations"}])
 
     def test_table_value_columns_are_renamed(self) -> None:
         # Multi-target tables name their value fields "Value #A"; a
