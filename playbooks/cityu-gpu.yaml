@@ -31,6 +31,11 @@
       register: cityu_gpu_listen
       changed_when: false
 
+    - name: Read service states
+      ansible.builtin.service_facts:
+
+    # After the first deploy the exporter itself holds the port, so a
+    # listener only counts as foreign while the exporter is not running.
     - name: Check cityu_gpu_exporter_port
       ansible.builtin.assert:
         that:
@@ -39,6 +44,7 @@
           {{ tailnet_ip }}:{{ cityu_gpu_exporter_port }} is already in use on
           {{ inventory_hostname }}; set cityu_gpu_exporter_port elsewhere.
         quiet: true
+      when: ansible_facts.services['nvitop-exporter.service'].state | default('') != 'running'
 
 - name: Run the nvitop exporter
   hosts: cityu
