@@ -362,7 +362,12 @@
             use_proxy: false
             return_content: true
           register: cityu_gpu_targets
-          until: cityu_gpu_targets.status == 200
+          # A recreated Prometheus reports every target as unknown until its
+          # first scrape, which would fail the health asserts below.
+          until:
+            - cityu_gpu_targets.status == 200
+            - cityu_gpu_targets.json.data.activeTargets | length > 0
+            - cityu_gpu_targets.json.data.activeTargets | selectattr('health', 'equalto', 'unknown') | list | length == 0
           retries: 12
           delay: 5
 
