@@ -1,16 +1,24 @@
 # Vaultwarden latest-alpine 升级与回滚
 
-本文件是待批准的部署操作单。此次只修改本地仓库、执行本地检查和线上只读核实；下列拉取、备份、停机、部署及回滚命令均未执行。不要跳过一致性备份直接运行 playbook。
+本文件是浮动 tag 升级的操作方法，2026-10-08 已按此单执行过一次（见「执行
+记录」）。以后升级沿用同一方法，不要跳过一致性备份直接运行 playbook。
 
 ## 已核实的状态（2026-10-07 UTC）
 
 - 当时核实的官方最新稳定版：1.37.4，发布于 2026-10-05，包含组织成员撤销等安全修复；这是历史快照，不是固定部署目标。
-- 目标：`sg1` / `key.myl.moe`，SSH `myl@167.104.101.86:50000`。
+- 目标：`sg1` / `key.myl.moe`。
 - 线上二进制与 `/api/version` 均为 **1.37.3**，容器健康。
 - 旧镜像：`vaultwarden/server:latest-alpine`；只读检查时的 image ID 和 RepoDigest 均指向 `sha256:9a905c5cf5df61bb827da3805e160170741c0b53b0c63bb07e1afd3d2e21b1c8`。部署前重新记录，不依赖此快照。
 - 挂载：`/srv/vaultwarden/data:/data`；默认 SQLite，存在 `db.sqlite3`，未设置自定义 `DATABASE_URL`；`config.json` 不存在。
 - 宿主架构：`x86_64`；Docker Compose `v5.5.1`。
 - 部署使用 `latest-alpine`，每次执行 playbook 都拉取镜像，去除重复容器重建，等待健康并记录实际版本、核对镜像 ID 和检查数据库连接。端口、令牌、注册策略和可信代理设置保持原样。
+
+## 执行记录（2026-10-08）
+
+维护窗口 2026-10-08 05:13 与 05:17 UTC 两次完整冷备（相隔约 4 分钟），各含
+version.txt（1.37.3）、old-image.tar、data.tar、stack.tar 与 SHA256SUMS，均保留
+在 sg1 的备份目录下，是现行的回滚材料。部署后线上为 1.37.4；2026-10-28 复核
+`/api/version` 仍为 1.37.4。备份恢复演练与升级后的客户端验收未做过。
 
 ## 镜像更新策略
 
@@ -18,7 +26,7 @@
 
 ## 代理链及升级要求
 
-已只读核对线上与仓库的相关指令一致：Nginx 只信任指定 Cloudflare 网段，通过 `CF-Connecting-IP` 得到 `$remote_addr`，再覆盖 `X-Real-IP`。线上没有设置 `IP_HEADER` / `IP_HEADER_TRUSTED_PROXIES`，也没有管理界面配置覆盖；容器网关为 `172.27.0.1`。
+已只读核对线上与仓库的相关指令一致：Nginx 只信任指定 Cloudflare 网段，通过 `CF-Connecting-IP` 得到 `$remote_addr`，再覆盖 `X-Real-IP`。线上没有设置 `IP_HEADER` / `IP_HEADER_TRUSTED_PROXIES`，也没有管理界面配置覆盖；容器网关在 Docker 私网段。
 
 1.37.4 的默认值仍是 `IP_HEADER=X-Real-IP` 和 `IP_HEADER_TRUSTED_PROXIES=local`。`local` 包含非公网地址，当前本机 Nginx → Docker 私网网桥链路无需新增信任网段。本次线上 `nginx -t` 已通过，但有原有的 HTTP/2 指令弃用和其他站点 protocol options 警告；此次不扩大修复范围。部署前重新核对相关指令，只检查此站点和 real-ip 指令，不打印完整配置或环境变量。
 
@@ -26,7 +34,7 @@
 
 1.37.3 → 1.37.4 未列出必须手工执行的迁移或中间版本，但程序启动会自动迁移数据库，因此回滚必须恢复升级前数据。当前使用 SQLite，不适用发布说明中的 Alpine/MariaDB TLS 注意项；不要添加关闭 TLS 验证的变量。若使用较旧 Bitwarden CLI，部署后应验证 Send 接收功能。
 
-## 批准后的部署步骤
+## 部署步骤
 
 先约定维护窗口：完整数据冷备需要短暂停止 Vaultwarden。通知使用者避免写入；回滚会丢失备份之后产生的写入。下列命令分为 **sg1 上的 root shell** 和 **Mac 本地** 两部分，不要混用。
 
@@ -101,8 +109,8 @@ container_id=$(docker compose ps -q vaultwarden)
 docker exec "$container_id" /vaultwarden --version
 docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id"
 sudo nginx -t
-curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:50002/api/version
-curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:50002/api/alive
+curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:PORT/api/version
+curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:PORT/api/alive
 ```
 
 在 Mac 检查公网 HTTPS（验证证书，不使用 `-k`）：
@@ -159,7 +167,7 @@ nginx -s reload
 - 现有仓库 15 个 Python 单元测试通过（使用 Ansible 的 Python 3.14；系统 Python 3.9 不支持现有测试依赖的 `typing.Never`）。
 - 独立审查通过；5 个操作单 Bash 代码块通过 `bash -n`。
 
-尚未进行实际线上升级、备份恢复演练或升级后的客户端验收；这些需在批准后的维护窗口完成。
+线上升级已于 2026-10-08 执行（见「执行记录」）；备份恢复演练与升级后的客户端验收仍未进行。
 
 ## 浮动标签方案验证记录（2026-10-08）
 
