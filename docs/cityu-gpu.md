@@ -1,7 +1,6 @@
 # cityu-gpu
 
-GPU 监控面板,覆盖两台 cityu 服务器(cs11369a 4× RTX A6000,cs659b 2× RTX PRO 5000
-Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占用。刷新 5 秒,数据采集
+GPU 监控面板,覆盖两台 cityu 服务器(一台 4 卡,一台 2 卡)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占用。刷新 5 秒,数据采集
 1 秒一次。
 
 `playbooks/cityu-gpu.yaml` 部署,旋钮都在 playbook 的 `vars` 和
@@ -20,8 +19,8 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
 - cityu 两台另跑 `gpu-idle-reaper` systemd 服务(root),绑 tailnet 地址 :8001,导出每个 GPU 进程离被结束还剩多久,Prometheus 用第二个 job `gpu-idle-reaper` 抓取,显示为「逐用户占用」表的 `kill 倒计时` 列。
   规则、dry-run 与日志见 [gpu-idle-reaper.md](gpu-idle-reaper.md)。
 - sg1 nginx 站点 `cityu-gpu.myl.moe`(Cloudflare proxied,泛域名 origin 证书)
-  纯反代到 Grafana。认证在 Grafana 自己的登录页:共享 viewer 账号 `cityu`
-  (***REMOVED***),会话 cookie 默认 30 天,密码只在 playbook
+  纯反代到 Grafana。认证在 Grafana 自己的登录页:共享 viewer 账号
+  (密码存 secrets),会话 cookie 默认 30 天,密码只在 playbook
   首次建号时写入。公网只暴露这一个入口。
 
 边界:Mylnet 与 CityU 两个管理域,sg1 通过 `host_vars/sg1.yaml` 里的字面量
@@ -30,23 +29,19 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
 
 ## 文件
 
-| 位置 | 内容 |
-|---|---|
-| cityu 两台 `/etc/systemd/system/nvitop-exporter.service`(+`.d/hardening.conf`) | exporter 单元 |
-| cityu 两台 `/opt/nvitop-exporter/` | venv |
-| sg1 `/opt/stacks/cityu-gpu/{compose.yaml,prometheus.yml}` | 栈配置 |
-| sg1 `/srv/cityu-gpu/` | TSDB 与 Grafana 数据、dashboard JSON、provisioning |
-| sg1 `/etc/nginx/sites-available/cityu-gpu` | 站点(纯反代) |
+部署产物:两台的 nvitop-exporter systemd 单元(含加固 drop-in)与 `/opt`
+venv、sg1 的 compose 栈与 `/srv/cityu-gpu` 数据目录、nginx 反代站点;具体
+路径以 playbook 任务为准。
 
 ## 先决(手动)
 
 - DNS:Cloudflare 里 `cityu-gpu.myl.moe` A 记录指向 sg1 公网 IP,proxied。
-- secrets:`secrets.yaml` 的 `cityu_gpu_grafana_admin_password`(Grafana 管理员)
-  与 `cityu_gpu_panel_password`(共享 viewer 账号 `cityu` 的登录密码,只在
-  playbook 首次建号时写入)。轮换密码在 Grafana 里用 admin 改,不要重跑
-  playbook 期望它生效;改密的 admin API 会吊销该用户全部会话,所以 playbook
-  只在建号时调用一次。
-- sg1 能达两台 exporter 的 tailnet 地址(tailnet ACL 需放行 sg1 → 100.x:8000,以及 gpu-idle-reaper 的 sg1 → 100.x:8001)。
+- secrets:`secrets.yaml` 的 Grafana 管理员密码与共享 viewer 密码两个变量
+  (变量名见 playbook;只在首次建号时写入)。轮换密码在 Grafana 里用 admin
+  改,不要重跑 playbook 期望它生效;改密的 admin API 会吊销该用户全部会话,
+  所以 playbook 只在建号时调用一次。
+- sg1 能达两台 exporter 的 tailnet 地址(tailnet ACL 需放行 sg1 到两台的
+  8000,以及 gpu-idle-reaper 的 8001)。
   2026-10-26 时现有规则已放行 sg1 访问两台的全部端口。若以后收窄,要保留 8001,否则 playbook 最后的 gpu-idle-reaper 抓取检查会失败,倒计时列为空。
 - 先跑 `playbooks/gpu-idle-reaper.yaml`,再跑本 playbook。
 
@@ -70,7 +65,7 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
 - 表格面板多查询合并后,值列的原始字段名是 `Value #A` 形态,organize
   transform 必须按这个键名改名,否则列头不可读(测试有回归断言)。
 
-- cs659b 的 127.0.0.1:8000 已被别的服务占用;exporter 绑 tailnet 地址,
+- 其中一台的 127.0.0.1:8000 已被别的服务占用;exporter 绑 tailnet 地址,
   不冲突。playbook 的端口检查只看 tailnet 地址上的绑定。
 - 个别 GPU 进程的 SM 采样返回不可用(NVML 对部分进程不给计算采样),面板上
   SM 列显示空属正常;显存归因不受影响,同同学面板的「不可用」标注。

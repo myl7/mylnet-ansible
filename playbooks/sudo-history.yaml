@@ -1,31 +1,12 @@
 ---
 # sudo command history on the cityu GPU servers, for attribution: who ran
-# what with root privileges, when, and from where.
-#
-# Every sudo invocation already travels as an authpriv message (user, tty,
-# working directory, target user, full command). This playbook only re-files
-# them: each host keeps a dedicated /var/log/sudo.log, and every host except
-# the receiver also forwards its copy to cs659b over the tailnet, whose own
-# sudo.log becomes the merged history of both machines (hostname per line).
-# auth.log and syslog keep their copies - the routing rule has no stop - so
-# the usual auth trail and fail2ban are unchanged.
-#
-# Nothing here defends against a hostile root: a sudoer can edit or delete
-# these logs. The assumption is honest users who sometimes need to be asked
-# "who did this", not adversaries. Direct root logins and privilege paths
-# that bypass sudo are out of scope; auth.log and the journal still cover
-# the logins themselves.
-#
-# cs11369a runs a volatile journal (no /var/log/journal) holding ~100G in
-# /run: its sudo history dies on reboot, and the journal is far too large
-# to flush into the nearly full root partition. The playbook exports the
-# journal's sudo events to /var/log/sudo-journal-rescue.log once instead
-# (delete the file and re-run to refresh) and leaves the journal volatile;
-# sudo.log and the cs659b merged copy carry the history from here on.
-# cs659b's journal is already persistent and untouched.
-#
-# See docs/sudo-history.md for querying, retention and the manual cleanup
-# scope.
+# what with root privileges, when, and from where. rsyslog re-files every
+# sudo authpriv message into /var/log/sudo.log on each host, and every host
+# except the receiver also forwards its copy to cs659b over the tailnet,
+# whose own sudo.log becomes the merged history of both machines. Nothing
+# here defends against a hostile root; the assumption is honest users.
+# The design, the volatile-journal rescue, querying and the manual cleanup
+# scope live in docs/sudo-history.md.
 - name: Check the cityu hosts
   hosts: cityu
   become: true
