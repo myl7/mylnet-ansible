@@ -42,11 +42,12 @@ The template renders twice, selected by the `clash_tailnet` variable:
   on the CityU campus network. The `proxy` group lists them all; `cn` lists
   `cu-tailnet`. They must never join `ts-underlay` (they dial through
   TAILNET and would loop).
-- DNS: `nameserver-policy` resolves `*.tailnet-d39d.ts.net` via `ts://TAILNET`;
+- DNS: `nameserver-policy` resolves `*.<tailnet>.ts.net` (the tailnet's
+  MagicDNS domain) via `ts://TAILNET`;
   every other domain keeps the existing nameservers. Bare short names
-  (`http://sg1:50015`) are NOT supported: neither mihomo (no search-domains
+  (e.g. `http://sg1:<port>`) are NOT supported: neither mihomo (no search-domains
   option) nor the tailscale outbound expands DNS search domains, so use the
-  full `*.tailnet-d39d.ts.net` names.
+  full `*.<tailnet>.ts.net` names.
 - Rules: the tailnet domain, `100.64.0.0/10` (tailnet range), and
   `100.100.100.100/32` (MagicDNS resolver) route to `TAILNET` ahead of the
   private-range DIRECT rules that would otherwise capture them.
@@ -72,15 +73,15 @@ The login is driven by a one-time auth key added on the device, inside FlClash:
 1. Generate an auth key in the Tailscale admin console (single use, not
    ephemeral, no tags).
 2. In FlClash, open the subscription profile's editor. In the `TAILNET`
-   proxy, right below `hostname: vs30-mihomo`, add a line with the same
+   proxy, right below the `hostname:` line, add a line with the same
    indentation:
 
        auth-key: "tskey-auth-..."
 
-3. Save, keep the VPN running, and open `http://100.69.54.3/` (or any
-   tailnet-d39d.ts.net name) in a browser. The page does not need to load;
+3. Save, keep the VPN running, and open `http://<cu-ip>/` (or any
+   <tailnet>.ts.net name) in a browser. The page does not need to load;
    the attempt alone triggers the on-demand start and the key login.
-4. The node `vs30-mihomo` appears in the admin console. Refresh the
+4. The node appears in the admin console. Refresh the
    subscription once afterwards: the local edit (and the key) disappears,
    while the identity stays in `state-dir`.
 
@@ -107,11 +108,11 @@ from the override set:
    which shows a YAML document listing only the overridden keys.
 2. Delete the `nameserver-policy:` block and save. From then on that key
    flows through from the subscription, so
-   `"+.tailnet-d39d.ts.net": ts://TAILNET` reaches the core while the rest
+   `"+.<tailnet>.ts.net": ts://TAILNET` reaches the core while the rest
    of the DNS override keeps working.
-3. Reconnect the VPN and open `http://sg1.tailnet-d39d.ts.net/`. Any HTTP
+3. Reconnect the VPN and open `http://sg1.<tailnet>.ts.net/`. Any HTTP
    response — even a refused connection — means resolution worked; the log
-   should show the request matching `DomainSuffix(tailnet-d39d.ts.net)` with
+   should show the request matching `DomainSuffix(<tailnet>.ts.net)` with
    outbound `TAILNET`.
 
 Keep the override document free of `nameserver-policy` after future FlClash
@@ -128,8 +129,8 @@ outbound, e.g. `... --> TAILNET[domain]` or `... --> DIRECT`.
 | Ordinary CN website | `DIRECT` via `cn`, unchanged |
 | Ordinary foreign website | `proxy` group, unchanged |
 | AI website | `ai` group, unchanged |
-| `http://100.69.54.3/` (cu by tailnet IP) | loads, outbound `TAILNET` |
-| `http://cu.tailnet-d39d.ts.net/` | loads, outbound `TAILNET` |
+| `http://<cu-ip>/` (cu by tailnet IP) | loads, outbound `TAILNET` |
+| `http://cu.<tailnet>.ts.net/` | loads, outbound `TAILNET` |
 | UDP echo to cu (below) | echoed, outbound `TAILNET`, `[UDP]` in the log |
 | Subscription refresh | tailnet still reachable, same device identity |
 | FlClash restart | tailnet still reachable, no re-login |
@@ -143,7 +144,7 @@ For the UDP row, an echo server on `cu` port 35353/udp (started for the
 acceptance run, auto-expires after 24h):
 
 ```sh
-ssh myl@100.69.54.3
+ssh myl@<cu-ip>
 nohup timeout 24h python3 -c 'import socket
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.bind(("0.0.0.0", 35353))
@@ -153,7 +154,7 @@ while True:
 ```
 
 From the phone, e.g. with Termux: `pkg install nmap-ncat`, then
-`ncat -u 100.69.54.3 35353`, type a line, and expect it echoed back.
+`ncat -u <cu-ip> 35353`, type a line, and expect it echoed back.
 
 ## Stability checklist (WP2)
 
