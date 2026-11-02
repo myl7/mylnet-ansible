@@ -25,6 +25,12 @@ observability:
   logs:
     logging-to-file: true
 
+# Forward filtered upstream response headers to clients (e.g. LiteLLM's
+# x-ratelimit-team_member-* quota headers, for proactive client throttling).
+# CLIProxyAPI strips x-litellm-* gateway headers regardless of this flag.
+requests:
+  passthrough-headers: true
+
 plugins:
   enabled: true
   store-auth:
