@@ -1,11 +1,11 @@
-"""Keep docs/ publishable.
+"""Keep docs/ inside the repo's public disclosure.
 
-The docs directory is copied to a public repository. Machine facts
-(hostnames, addresses, ports, account names) belong to the playbooks and
-inventories, so this scan fails closed on identifiers that must never
-appear in a doc. A hit means: move the fact to the playbook, or replace
-it with a role or placeholder. Extend BANNED whenever a new identifier
-must never leak.
+The repository itself is public, so hostnames, domains, addresses, ports
+and account names that tracked files already carry are fine to repeat in
+a doc. This scan fails closed only on identifiers the repo does NOT
+expose. A hit means: move the fact out of docs (or replace it with a
+placeholder). Extend BANNED when a new non-repo identifier must never
+leak; do not add tokens that inventories or playbooks already publish.
 """
 
 import unittest
@@ -13,9 +13,9 @@ from pathlib import Path
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 
-# Lowercase; matched case-insensitively. Hostnames and addresses of the
-# fleet and the lab machines, the tailnet's DNS name, the SSH port, and
-# account or node names that identify real machines.
+# Lowercase; matched case-insensitively. Real lab usernames beyond the
+# ones hosts.toml already names are machine-internal facts about the
+# cityu GPU servers, not deployment facts.
 BANNED = ()
 
 
@@ -32,7 +32,7 @@ class DocsPublicSafe(unittest.TestCase):
         self.assertEqual(
             [],
             violations,
-            "docs/ is published; move machine facts to the playbooks: "
+            "docs/ must not carry facts the repo does not expose: "
             + "; ".join(violations),
         )
 
