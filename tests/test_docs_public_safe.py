@@ -13,9 +13,11 @@ from pathlib import Path
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 
-# Lowercase; matched case-insensitively. Real lab usernames beyond the
-# ones hosts.toml already names are machine-internal facts about the
-# cityu GPU servers, not deployment facts.
+# Lowercase; matched case-insensitively. Tripwires for the two banned
+# categories: machine-internal state of the cityu GPU servers that the
+# repo does not disclose (pre-existing config defects, outage history),
+# and credential relationships. Lab usernames beyond the ones hosts.toml
+# already names fall under the first category.
 BANNED = ()
 
 

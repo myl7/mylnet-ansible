@@ -39,9 +39,7 @@
         fail_msg: >-
           {{ inventory_hostname }} / has {{ sudo_history_root_free_mb }} MiB
           free, under the {{ sudo_history_min_root_free_mb }} MiB floor; a
-          disk that tight silences rsyslog ***REMOVED***
-          ***REMOVED*** ***REMOVED*** - see
-          docs/sudo-history.md).
+          disk that tight silences rsyslog entirely.
         quiet: true
 
 # The receiver must listen before anyone forwards to it, and the free

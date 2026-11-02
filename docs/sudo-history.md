@@ -3,9 +3,7 @@
 Command-level attribution for privileged actions: who ran what through
 sudo, when, from which directory, and as whom. Deployed by
 `playbooks/sudo-history.yaml`; the knobs live in the playbook's `vars`
-(no group_vars, no secrets). Below, server A means cs11369a and server B
-means cs659b; the placeholders appear only where this doc reports
-machine-internal state that the repository does not disclose.
+(no group_vars, no secrets).
 
 ```
 cs11369a  /var/log/sudo.log              local events, forwarded to cs659b
@@ -60,9 +58,7 @@ rescue export never rotates: it is a fixed snapshot.
 
 At deploy time cs11369a's journal was volatile (`/var/log/journal`
 absent): ~100G of journal lived in `/run` (1TB RAM makes the tmpfs caps
-generous), holding the machine's only sudo history back to August — its
-`auth.log` ***REMOVED*** ***REMOVED*** when the full root
-partition ***REMOVED*** ***REMOVED***. The journal is far too large to
+generous), holding the machine's only sudo history back to August. The journal is far too large to
 flush into the nearly full root partition, and vacuuming it down first
 would destroy the very history worth saving, so the playbook exports just
 the sudo events to `/var/log/sudo-journal-rescue.log` (root:root 0640,
@@ -85,22 +81,6 @@ on the Mylnet hosts can be reconsidered.
   the campus network can neither reach nor spoof the input. If a firewall
   is ever installed on cs659b, allow 514/tcp on the tailscale interface.
 - Re-running the playbook converges; it is safe any time.
-
-## Pre-existing quirks (observed 2026-10-17, left alone)
-
-- server B has a `/etc/sudoers.d/` ***REMOVED***
-  ***REMOVED*** — ***REMOVED***
-  copied from server A.
-- server A's equivalent file ***REMOVED***
-  ***REMOVED***
-- server A's ***REMOVED***. ***REMOVED***
-  the full root partition ***REMOVED*** ***REMOVED*** write errors, and the
-  ***REMOVED*** (***REMOVED***
-  `failed` with ***REMOVED*** ***REMOVED*** ***REMOVED***
-  ***REMOVED*** ***REMOVED*** — no journal, no auth.log.
-  ***REMOVED*** brought logging
-  back; the rescue export ***REMOVED***,
-  and ***REMOVED***.
 
 ## Manual cleanup scope
 
