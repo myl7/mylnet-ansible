@@ -78,3 +78,25 @@ New nginx htpasswd files should be generated with bcrypt cost 5: `htpasswd -cBC 
 # Docker Image Preference
 
 Prefer floating Docker image tags that track upstream stable releases, such as `latest-alpine` for Vaultwarden. This allows updates when the playbook runs without requiring a repository change and commit for every upstream release. Do not pin versions or image digests unless the user explicitly requests it or a specific compatibility issue requires it. Pull images during deployment, verify service health, and record the running version. Preserve the previous image ID or digest for backup and rollback.
+
+# Docs
+
+This repository is public, and inventories/hosts.toml already publishes every
+hostname, address, port, and login user. Use those real names in docs/ too:
+never invent placeholder names for real machines or for external state a doc
+mirrors (the kuma monitor inventory uses the exact monitor names). Name a doc
+after the playbook it documents.
+
+Do not commit, in docs or commit messages:
+
+- machine-internal state of the cityu GPU servers beyond what playbooks
+  disclose (pre-existing host misconfigurations, outage history),
+- credential values or relationships between credentials,
+- lab usernames beyond the ones inventories name.
+
+Omit such details entirely; an anonymized mapping written next to the
+placeholder is not sanitization. tests/test_docs_public_safe.py fails closed
+on these categories.
+
+If sensitive content was already committed, say so and propose a
+git-filter-repo history rewrite; a forward fix leaves it in the history.
