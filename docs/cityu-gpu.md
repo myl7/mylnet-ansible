@@ -1,6 +1,7 @@
 # cityu-gpu
 
-GPU 监控面板,覆盖两台 cityu 服务器(一台 4 卡,一台 2 卡)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占用。刷新 5 秒,数据采集
+GPU 监控面板,覆盖两台 cityu 服务器(cs11369a 4× RTX A6000,cs659b 2× RTX PRO 5000
+Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占用。刷新 5 秒,数据采集
 1 秒一次。
 
 `playbooks/cityu-gpu.yaml` 部署,旋钮都在 playbook 的 `vars` 和
@@ -19,9 +20,8 @@ GPU 监控面板,覆盖两台 cityu 服务器(一台 4 卡,一台 2 卡)。回�
 - cityu 两台另跑 `gpu-idle-reaper` systemd 服务(root),绑 tailnet 地址 :8001,导出每个 GPU 进程离被结束还剩多久,Prometheus 用第二个 job `gpu-idle-reaper` 抓取,显示为「逐用户占用」表的 `kill 倒计时` 列。
   规则、dry-run 与日志见 [gpu-idle-reaper.md](gpu-idle-reaper.md)。
 - sg1 nginx 站点 `cityu-gpu.myl.moe`(Cloudflare proxied,泛域名 origin 证书)
-  纯反代到 Grafana。认证在 Grafana 自己的登录页:共享 viewer 账号
-  (密码存 secrets),会话 cookie 默认 30 天,密码只在 playbook
-  首次建号时写入。公网只暴露这一个入口。
+  纯反代到 Grafana。认证在 Grafana 自己的登录页:共享 viewer 账号 `cityu`
+  (密码存 secrets,首次建号时由 playbook 写入),会话 cookie 默认 30 天。公网只暴露这一个入口。
 
 边界:Mylnet 与 CityU 两个管理域,sg1 通过 `host_vars/sg1.yaml` 里的字面量
 `cityu_gpu_exporters`(host → tailnet IP)抓取 exporter,不做跨组 hostvars
@@ -36,9 +36,9 @@ venv、sg1 的 compose 栈与 `/srv/cityu-gpu` 数据目录、nginx 反代站点
 ## 先决(手动)
 
 - DNS:Cloudflare 里 `cityu-gpu.myl.moe` A 记录指向 sg1 公网 IP,proxied。
-- secrets:`secrets.yaml` 的 Grafana 管理员密码与共享 viewer 密码两个变量
-  (变量名见 playbook;只在首次建号时写入)。轮换密码在 Grafana 里用 admin
-  改,不要重跑 playbook 期望它生效;改密的 admin API 会吊销该用户全部会话,
+- secrets:`secrets.yaml` 的 `cityu_gpu_grafana_admin_password`(Grafana 管理员)
+  与 `cityu_gpu_panel_password`(共享 viewer 账号 `cityu` 的登录密码,只在
+  playbook 首次建号时写入)。轮换密码在 Grafana 里用 admin 改,不要重跑 playbook 期望它生效;改密的 admin API 会吊销该用户全部会话,
   所以 playbook 只在建号时调用一次。
 - sg1 能达两台 exporter 的 tailnet 地址(tailnet ACL 需放行 sg1 到两台的
   8000,以及 gpu-idle-reaper 的 8001)。

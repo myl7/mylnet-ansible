@@ -1,6 +1,6 @@
 # uptime
 
-uptime-kuma 部署在 sg1(`playbooks/uptime.yaml`,容器绑 sg1 回环,nginx
+uptime-kuma 部署在 sg1(`playbooks/uptime.yaml`,容器 `127.0.0.1:50005`,nginx
 反代 `uptime.myl.moe`)。监控项不是部署产物:kuma 2 构建里没有管理 API,只有
 socket.io + 管理员登录,所以监控项在 UI 手工维护,本文件是仓库侧清单,改动
 监控时两边同步。
@@ -11,21 +11,21 @@ socket.io + 管理员登录,所以监控项在 UI 手工维护,本文件是仓�
 |---|---|---|---|---|
 | key.myl.moe | HTTP(s) | `https://key.myl.moe` | 60 | Uptime |
 | dav.myl.moe | HTTP(s) | `https://dav.myl.moe/public/` | 60 | Uptime |
-| GPU 服务器 A · SSH (22) | Port | `gpu-a.<tailnet>.ts.net:22`(FQDN,见下) | 60 | Uptime |
-| GPU 服务器 A · Tailscale 连通 | Ping | `gpu-a`(裸短名) | 60 | Uptime |
-| GPU 服务器 B · SSH (22) | Port | `gpu-b.<tailnet>.ts.net:22`(FQDN,见下) | 60 | Uptime |
-| GPU 服务器 B · Tailscale 连通 | Ping | `gpu-b`(裸短名) | 60 | Uptime |
-| cu · SOCKS (10800) | Port | `cu.<tailnet>.ts.net:10800`(FQDN,见下) | 60 | Uptime |
+| cs11369a · SSH (22) | Port | `cs11369a.tailnet-d39d.ts.net:22`(FQDN,见下) | 60 | Uptime |
+| cs11369a · Tailscale 连通 | Ping | `cs11369a` | 60 | Uptime |
+| cs659b · SSH (22) | Port | `cs659b.tailnet-d39d.ts.net:22`(FQDN,见下) | 60 | Uptime |
+| cs659b · Tailscale 连通 | Ping | `cs659b` | 60 | Uptime |
+| cu · SOCKS (10800) | Port | `cu.tailnet-d39d.ts.net:10800`(FQDN,见下) | 60 | Uptime |
 | cu · Tailscale 连通 | Ping | `cu` | 60 | Uptime |
 | cityu-print.myl.moe | HTTP(s) | `https://cityu-print.myl.moe/`,接受状态码 401 | 60 | Uptime |
 | cityu-print · 打印链路 | HTTP(s) - Keyword | `https://cityu-print.myl.moe/api/check`,关键词 `"ok":true`(紧凑无空格,见下),Basic Auth 用户 `cityu`(密码同 cityu-print 站点) | 60 | Uptime |
 
-存量 GPU 服务器 A/B 四条监控在 kuma 里未挂通知,只有 key/dav 挂了。补挂
+存量 cs11369a/cs659b 四条监控在 kuma 里未挂通知,只有 key/dav 挂了。补挂
 「Uptime」渠道,否则 cityu 侧断网只变色面板,不触发通知。
 
 ## kuma 假红(裸主机名 + Port 监控,2026-10-23 调查定论)
 
-Port 监控目标写裸主机名(`gpu-a`)时大面积假红:GPU 服务器两条 SSH 监控自
+Port 监控目标写裸主机名(`cs11369a`)时大面积假红:cs 两条 SSH 监控自
 9 月起间歇假红,10-22 18:19 UTC 起连续红 15 小时(92% 失败),每次红
 的 `end_time − time` 恰好 5.000s。根因三层叠加:
 
@@ -37,7 +37,7 @@ Port 监控目标写裸主机名(`gpu-a`)时大面积假红:GPU 服务器两条 
 2. Node `net.connect` 走 getaddrinfo AF_UNSPEC(A+AAAA)解析裸单标签名:
    在 sg1 解析链(容器 127.0.0.11 → 宿主 systemd-resolved)上,绝对单标签
    查询先付 ~4s 慢路径(resolved 不把单标签转发上游,LLMNR 在多条链路上
-   耗尽后才 REFUSED),然后 search 展开 `gpu-a.<tailnet>.ts.net`
+   耗尽后才 REFUSED),然后 search 展开 `cs11369a.tailnet-d39d.ts.net`
    才落到 MagicDNS(0ms)。慢在前半程,冷解析 3.6–7.8s,与 5s 预算赛跑。
 3. 触发:2026-10-22 18:18 UTC 的 apt 升级轮(tailscale 1.102.4→1.104.2,
    docker-ce 同轮)重启 tailscaled,重新注册为 `tailscale0 default route:
@@ -87,13 +87,13 @@ submit 全部超时。网站与打印机本身全程健康,故障在传输链路
 ## 状态页
 
 公开页 `https://uptime.myl.moe/status/cityu`。两个组:`cityu-print` 按链路
-顺序放四条打印监控(前门、端到端、cu 隧道、cu SOCKS);`GPU 服务器(GPU 面板
-底座)` 放 A/B 四条。页面描述解释四条与打印可用性的对应关系。
+顺序放四条打印监控(前门、端到端、cu 隧道、cu SOCKS);`cs 主机(GPU 面板
+底座)` 放 cs11369a/cs659b 四条。页面描述解释四条与打印可用性的对应关系。
 组的呈现归 kuma UI 管,改动后同步本文件。
 
 ## 添加监控(手动)
 
 `uptime.myl.moe` → Add New Monitor,按上表逐条填,通知都选「Uptime」。需要
 留意的两处:kuma 容器跑在 sg1 上,Ping/Port 类监控的 hostname 走 sg1 的
-tailnet DNS(`cu`、GPU 服务器裸短名均可解析);`cityu-print.myl.moe` 那条要在
+tailnet DNS(`cu`、`cs11369a` 均可解析);`cityu-print.myl.moe` 那条要在
 Advanced 里把 Accepted Status Codes 勾成 401(htpasswd 质询即健康)。

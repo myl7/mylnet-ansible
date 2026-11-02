@@ -1,6 +1,6 @@
 # gpu-idle-reaper
 
-A root systemd service on the two cityu GPU servers.
+A root systemd service on the two cityu GPU servers (cs11369a and cs659b).
 It ends GPU processes that hold a CUDA context but have not computed for 24 hours of observed time.
 `playbooks/gpu-idle-reaper.yaml` deploys it, and its knobs are that playbook's `vars`.
 It ships in dry-run mode, where it logs what it would kill and never sends a signal.
@@ -67,7 +67,7 @@ On start, a file from an earlier boot, one saved more than 10 minutes ago, or on
 ## Reading the log
 
 ```
-2026-10-27T10:15:02+0800 INFO starting hostname=gpu-a metrics=<tailnet-ip>:8001 state_file=/var/lib/gpu-idle-reaper/state.json idle_seconds=86400 grace_seconds=60 interval=1 dry_run=True gpus=4
+2026-10-27T10:15:02+0800 INFO starting hostname=cs11369a metrics=100.104.99.124:8001 state_file=/var/lib/gpu-idle-reaper/state.json idle_seconds=86400 grace_seconds=60 interval=1 dry_run=True gpus=4
 2026-10-28T09:03:41+0800 INFO would kill user=alice pid=123456 gpus=0:20480MiB,1:20480MiB idle=24.0h cmd='python train.py --resume'
 2026-10-28T11:20:07+0800 INFO active again, no longer would kill user=alice pid=123456 gpus=0:20480MiB,1:20480MiB cmd='python train.py --resume'
 ```

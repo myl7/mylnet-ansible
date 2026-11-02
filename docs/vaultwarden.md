@@ -1,4 +1,4 @@
-# Vaultwarden latest-alpine 升级与回滚
+# vaultwarden
 
 本文件是浮动 tag 升级的操作方法，2026-10-08 已按此单执行过一次（见「执行
 记录」）。以后升级沿用同一方法，不要跳过一致性备份直接运行 playbook。
@@ -6,7 +6,7 @@
 ## 已核实的状态（2026-10-07 UTC）
 
 - 当时核实的官方最新稳定版：1.37.4，发布于 2026-10-05，包含组织成员撤销等安全修复；这是历史快照，不是固定部署目标。
-- 目标：`sg1` / `key.myl.moe`。
+- 目标：`sg1` / `key.myl.moe`，SSH `myl@167.104.101.86:50000`。
 - 线上二进制与 `/api/version` 均为 **1.37.3**，容器健康。
 - 旧镜像：`vaultwarden/server:latest-alpine`；只读检查时的 image ID 和 RepoDigest 均指向 `sha256:9a905c5cf5df61bb827da3805e160170741c0b53b0c63bb07e1afd3d2e21b1c8`。部署前重新记录，不依赖此快照。
 - 挂载：`/srv/vaultwarden/data:/data`；默认 SQLite，存在 `db.sqlite3`，未设置自定义 `DATABASE_URL`；`config.json` 不存在。
@@ -26,7 +26,7 @@ version.txt（1.37.3）、old-image.tar、data.tar、stack.tar 与 SHA256SUMS，
 
 ## 代理链及升级要求
 
-已只读核对线上与仓库的相关指令一致：Nginx 只信任指定 Cloudflare 网段，通过 `CF-Connecting-IP` 得到 `$remote_addr`，再覆盖 `X-Real-IP`。线上没有设置 `IP_HEADER` / `IP_HEADER_TRUSTED_PROXIES`，也没有管理界面配置覆盖；容器网关在 Docker 私网段。
+已只读核对线上与仓库的相关指令一致：Nginx 只信任指定 Cloudflare 网段，通过 `CF-Connecting-IP` 得到 `$remote_addr`，再覆盖 `X-Real-IP`。线上没有设置 `IP_HEADER` / `IP_HEADER_TRUSTED_PROXIES`，也没有管理界面配置覆盖；容器网关为 `172.27.0.1`。
 
 1.37.4 的默认值仍是 `IP_HEADER=X-Real-IP` 和 `IP_HEADER_TRUSTED_PROXIES=local`。`local` 包含非公网地址，当前本机 Nginx → Docker 私网网桥链路无需新增信任网段。本次线上 `nginx -t` 已通过，但有原有的 HTTP/2 指令弃用和其他站点 protocol options 警告；此次不扩大修复范围。部署前重新核对相关指令，只检查此站点和 real-ip 指令，不打印完整配置或环境变量。
 
@@ -109,8 +109,8 @@ container_id=$(docker compose ps -q vaultwarden)
 docker exec "$container_id" /vaultwarden --version
 docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id"
 sudo nginx -t
-curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:PORT/api/version
-curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:PORT/api/alive
+curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:50002/api/version
+curl --fail --silent --show-error --noproxy '*' http://127.0.0.1:50002/api/alive
 ```
 
 在 Mac 检查公网 HTTPS（验证证书，不使用 `-k`）：
