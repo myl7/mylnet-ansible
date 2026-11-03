@@ -95,8 +95,8 @@ Do not commit, in docs or commit messages:
 - lab usernames beyond the ones inventories name.
 
 Omit such details entirely; an anonymized mapping written next to the
-placeholder is not sanitization. tests/test_docs_public_safe.py fails closed
-on these categories.
+placeholder is not sanitization. Nothing in this repository lists the banned
+tokens: naming them in a public file would leak them.
 
 If sensitive content was already committed, say so and propose a
 git-filter-repo history rewrite; a forward fix leaves it in the history.
