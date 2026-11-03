@@ -359,7 +359,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "占用显卡的每个用户和进程。kill 倒计时是进程再闲置多久会被结束, 期间有任何计算就重新计时。",
+      "description": "占用显卡的每个用户和进程。可结束倒计时是进程再闲置多久后, 任何用户都能登录机器用 gpu-idle-kill 结束它, 期间有任何计算就重新计时。",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -384,7 +384,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "kill 倒计时"
+              "options": "可结束倒计时"
             },
             "properties": [
               {
@@ -425,7 +425,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (proc) (label_join(gpu_idle_reaper_kill_in_seconds, \"proc\", \"-\", \"hostname\", \"index\", \"pid\"))",
+          "expr": "sum by (proc) (label_join(gpu_idle_kill_in_seconds, \"proc\", \"-\", \"hostname\", \"index\", \"pid\"))",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -463,7 +463,7 @@
             },
             "renameByName": {
               "Value #A": "GPU 显存 MiB",
-              "Value #B": "kill 倒计时",
+              "Value #B": "可结束倒计时",
               "hostname": "主机",
               "index": "卡",
               "pid": "PID",

@@ -1,0 +1,184 @@
+---
+# Track idle GPU processes on the cityu hosts and end them on request.
+#
+# The service (gpu_idle_kill.py, root) watches NVML: a process counts as idle
+# while no utilization sample appears for it. After gpu_idle_kill_idle_seconds
+# of observed idleness any user on the host may end it with the gpu-idle-kill
+# command, which requests a kill over /run/gpu-idle-kill/kill.sock. A granted
+# request SIGTERMs the process and SIGKILLs it gpu_idle_kill_grace_seconds
+# later. The service never signals on its own.
+#
+# Ships in dry-run (gpu_idle_kill_dry_run: true): kill requests are checked
+# and logged, but nothing is signalled. The per-process countdown is exported
+# on tailnet_ip:gpu_idle_kill_port, scraped by the panel in cityu-gpu.yaml.
+#
+# See docs/gpu-idle-kill.md for the exact rule, its detection floor, and the
+# tailnet ACL prerequisite.
+
+- name: Check the cityu hosts
+  hosts: cityu
+  gather_facts: false
+
+  vars:
+    gpu_idle_kill_port: 8001
+
+  tasks:
+    - name: Read listening sockets
+      ansible.builtin.command:
+        cmd: ss -tln
+      register: gpu_idle_kill_listen
+      changed_when: false
+
+    - name: Read service states
+      ansible.builtin.service_facts:
+
+    # After the first deploy the service itself holds the port, so a listener
+    # only counts as foreign while the service is not running.
+    - name: Check gpu_idle_kill_port
+      ansible.builtin.assert:
+        that:
+          - gpu_idle_kill_listen.stdout is not search(tailnet_ip ~ ':' ~ gpu_idle_kill_port ~ '\b')
+        fail_msg: >-
+          {{ tailnet_ip }}:{{ gpu_idle_kill_port }} is already in use on
+          {{ inventory_hostname }}; set gpu_idle_kill_port elsewhere.
+        quiet: true
+      when: ansible_facts.services['gpu-idle-kill.service'].state | default('') != 'running'
+
+- name: Run the GPU idle kill service
+  hosts: cityu
+  become: true
+
+  vars:
+    gpu_idle_kill_port: 8001
+    gpu_idle_kill_idle_seconds: 86400
+    gpu_idle_kill_grace_seconds: 60
+    gpu_idle_kill_dry_run: true
+
+  tasks:
+    # Another session may hold the dpkg lock; python3-venv is already present
+    # on both hosts, so this is usually a no-op that just needs to get through.
+    - name: Install python3-venv
+      ansible.builtin.apt:
+        name: python3-venv
+        state: present
+      register: gpu_idle_kill_apt
+      retries: 6
+      delay: 20
+      until: gpu_idle_kill_apt is succeeded
+
+    - name: Install nvidia-ml-py and prometheus-client into a venv
+      ansible.builtin.pip:
+        name:
+          - nvidia-ml-py
+          - prometheus-client
+        state: present
+        virtualenv: /opt/gpu-idle-kill
+        virtualenv_command: /usr/bin/python3 -m venv
+
+    - name: Copy the service
+      ansible.builtin.copy:
+        src: gpu-idle-kill/gpu_idle_kill.py
+        dest: /opt/gpu-idle-kill/gpu_idle_kill.py
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Restart gpu-idle-kill
+
+    - name: Copy the gpu-idle-kill command
+      ansible.builtin.copy:
+        src: gpu-idle-kill/gpu_idle_kill_cli.py
+        dest: /usr/local/bin/gpu-idle-kill
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render the gpu-idle-kill unit
+      ansible.builtin.template:
+        src: gpu-idle-kill/gpu-idle-kill.service.j2
+        dest: /etc/systemd/system/gpu-idle-kill.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart gpu-idle-kill
+
+    - name: Create the unit drop-in dir
+      ansible.builtin.file:
+        path: /etc/systemd/system/gpu-idle-kill.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Harden the gpu-idle-kill unit
+      ansible.builtin.copy:
+        src: systemd/hardening.conf
+        dest: /etc/systemd/system/gpu-idle-kill.service.d/hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart gpu-idle-kill
+
+    - name: Copy the logrotate config
+      ansible.builtin.copy:
+        src: gpu-idle-kill/logrotate.conf
+        dest: /etc/logrotate.d/gpu-idle-kill
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Start gpu-idle-kill
+      ansible.builtin.systemd_service:
+        name: gpu-idle-kill
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # Verify the code just copied, not the process it replaces.
+    - name: Apply service changes before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify the service
+      when: not ansible_check_mode
+      block:
+        - name: Read service metrics
+          ansible.builtin.uri:
+            url: "http://{{ tailnet_ip }}:{{ gpu_idle_kill_port }}/metrics"
+            use_proxy: false
+            return_content: true
+          register: gpu_idle_kill_metrics
+          until:
+            - gpu_idle_kill_metrics.status == 200
+            - "'# TYPE gpu_idle_kill_in_seconds gauge' in gpu_idle_kill_metrics.content"
+          retries: 12
+          delay: 5
+
+        - name: Read the process list through the command
+          ansible.builtin.command:
+            cmd: gpu-idle-kill list
+          register: gpu_idle_kill_list
+          changed_when: false
+          until: gpu_idle_kill_list.rc == 0
+          retries: 12
+          delay: 5
+
+        - name: Read service package versions
+          ansible.builtin.command:
+            argv:
+              - /opt/gpu-idle-kill/bin/python
+              - -c
+              - >-
+                import importlib.metadata as m;
+                print('nvidia-ml-py', m.version('nvidia-ml-py'), 'prometheus-client', m.version('prometheus-client'))
+          register: gpu_idle_kill_versions
+          changed_when: false
+
+        - name: Record service package versions
+          ansible.builtin.debug:
+            msg: "{{ inventory_hostname }} runs {{ gpu_idle_kill_versions.stdout | trim }}"
+
+  handlers:
+    - name: Restart gpu-idle-kill
+      ansible.builtin.systemd_service:
+        name: gpu-idle-kill
+        state: restarted
+        daemon_reload: true

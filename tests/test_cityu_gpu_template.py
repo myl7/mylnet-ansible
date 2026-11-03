@@ -21,7 +21,7 @@ FILES_DIR = PLAYBOOKS / "files" / "cityu-gpu"
 
 EXPORTERS = {"cs11369a": "100.104.99.124", "cs659b": "100.67.212.32"}
 EXPORTER_PORT = 8000
-REAPER_PORT = 8001
+KILL_PORT = 8001
 PROM_LOCAL_PORT = 50020
 GRAFANA_LOCAL_PORT = 50019
 DOMAIN = "cityu-gpu.myl.moe"
@@ -30,7 +30,7 @@ KEY = "/etc/nginx/tls/cloudflare/myl.moe.key"
 ADMIN_PASSWORD = "pa$$word"
 
 # Metric names exported by nvitop-exporter (units are part of the name), and
-# the countdown exported by gpu-idle-reaper.
+# the countdown exported by gpu-idle-kill.
 KNOWN_METRICS = {
     "gpu_utilization_Percentage",
     "gpu_memory_used_MiB",
@@ -39,7 +39,7 @@ KNOWN_METRICS = {
     "gpu_temperature_C",
     "process_gpu_memory_MiB",
     "process_gpu_sm_utilization_Percentage",
-    "gpu_idle_reaper_kill_in_seconds",
+    "gpu_idle_kill_in_seconds",
 }
 
 
@@ -82,7 +82,7 @@ class PrometheusConfigTest(unittest.TestCase):
                 "prometheus.yml.j2",
                 cityu_gpu_exporters=EXPORTERS,
                 cityu_gpu_exporter_port=EXPORTER_PORT,
-                gpu_idle_reaper_port=REAPER_PORT,
+                gpu_idle_kill_port=KILL_PORT,
             )
         )
         assert config is not None
@@ -96,7 +96,7 @@ class PrometheusConfigTest(unittest.TestCase):
             targets,
             {
                 "cityu-gpu": ["100.104.99.124:8000", "100.67.212.32:8000"],
-                "gpu-idle-reaper": ["100.104.99.124:8001", "100.67.212.32:8001"],
+                "gpu-idle-kill": ["100.104.99.124:8001", "100.67.212.32:8001"],
             },
         )
 
@@ -206,7 +206,7 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(exprs["A"], proc.format("process_gpu_memory_MiB"))
         self.assertEqual(
             exprs["B"],
-            "sum by (proc) ({})".format(proc.format("gpu_idle_reaper_kill_in_seconds")),
+            "sum by (proc) ({})".format(proc.format("gpu_idle_kill_in_seconds")),
         )
         self.assertEqual(
             table["transformations"][0],
@@ -217,13 +217,13 @@ class DashboardTest(unittest.TestCase):
         order = sorted(organize["indexByName"], key=organize["indexByName"].get)
         self.assertEqual(
             [organize["renameByName"][field] for field in order],
-            ["主机", "卡", "用户", "PID", "GPU 显存 MiB", "kill 倒计时"],
+            ["主机", "卡", "用户", "PID", "GPU 显存 MiB", "可结束倒计时"],
         )
         units = {
             override["matcher"]["options"]: override["properties"]
             for override in table["fieldConfig"]["overrides"]
         }
-        self.assertEqual(units["kill 倒计时"], [{"id": "unit", "value": "dtdurations"}])
+        self.assertEqual(units["可结束倒计时"], [{"id": "unit", "value": "dtdurations"}])
 
     def test_table_value_columns_are_renamed(self) -> None:
         # Multi-target tables name their value fields "Value #A"; a
