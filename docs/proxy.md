@@ -168,3 +168,10 @@ FlClash and exclude it from battery optimization.
 - No device in the admin console: open a tailnet address first; the outbound
   connects lazily.
 - DNS behaves oddly: disable Android Private DNS during the test and retry.
+- A Cloudflare-protected site (platform.openai.com login) shows a hard block:
+  the managed challenge must be solved from the same egress as the page. Two
+  gaps caused exactly that: `challenges.cloudflare.com` had no rule (it rode
+  DIRECT while the page rode `ai`), and QUIC flows carried no hostname (the
+  challenge iframe rides H3, which without QUIC sniffing falls through every
+  domain rule to MATCH). The subscription now routes the challenge domain to
+  `ai` and sniffs QUIC on 443.

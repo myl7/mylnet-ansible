@@ -28,6 +28,12 @@ sniffer:
     TLS:
       ports:
         - 443
+    # QUIC carries no hostname without sniffing, so H3 flows (the Cloudflare
+    # challenge iframe rides H3) would fall through every domain rule to
+    # MATCH and leak the client IP next to the sniffed ai egress.
+    QUIC:
+      ports:
+        - 443
   skip-domain:
     # Apple push uses long-lived connections.
     # Sniffing and rewriting will break the push connection.
@@ -297,8 +303,14 @@ rules:
   - DOMAIN-SUFFIX,statsig.com,ai
   - DOMAIN-SUFFIX,statsigcdn.com,ai
   - DOMAIN-SUFFIX,statsigapi.net,ai
+  - DOMAIN-SUFFIX,featuregates.org,ai
   - DOMAIN-SUFFIX,sift.com,ai
   - DOMAIN-SUFFIX,hcaptcha.com,ai
+  # Cloudflare Turnstile/managed-challenge assets. A challenge solved from
+  # a different IP than the challenged page escalates to a hard block, so
+  # this must ride the ai egress with the AI sites (platform.openai.com
+  # login stayed on the block page until it did).
+  - DOMAIN-SUFFIX,challenges.cloudflare.com,ai
   # Google AI past the gemini keyword: NotebookLM, Jules, Labs, AI Studio
   # backends, Gemini Code Assist
   - DOMAIN-SUFFIX,ai.google.dev,ai
