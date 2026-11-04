@@ -23,6 +23,9 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD={{ cityu_gpu_grafana_admin_password | replace("$", "$$") }}
       - GF_USERS_ALLOW_SIGN_UP=false
+      # The login page is public; sign-up and anonymous access are separate
+      # switches, and anonymous stays off explicitly instead of by default.
+      - GF_AUTH_ANONYMOUS_ENABLED=false
       # Lets the Agent 查询 panel's inline-onclick copy button run; only
       # admins can edit dashboards (the shared account is a Viewer), so the
       # unsanitized-HTML surface is admins alone.

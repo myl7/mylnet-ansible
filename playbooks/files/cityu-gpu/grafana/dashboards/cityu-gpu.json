@@ -260,7 +260,17 @@
       "id": 4,
       "options": {
         "cellHeight": "sm",
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "主机"
+          },
+          {
+            "desc": false,
+            "displayName": "卡"
+          }
+        ]
       },
       "targets": [
         {
@@ -391,7 +401,17 @@
       "id": 5,
       "options": {
         "cellHeight": "sm",
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "主机"
+          },
+          {
+            "desc": false,
+            "displayName": "卡"
+          }
+        ]
       },
       "targets": [
         {
