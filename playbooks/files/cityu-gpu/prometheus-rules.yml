@@ -1,0 +1,8 @@
+groups:
+  - name: cityu-gpu
+    rules:
+      # Single source of the idle verdict, shared by the panel's idle-count
+      # stat and the public agent query. A series exists only for an idle GPU;
+      # its value is the GPU's used memory in MiB.
+      - record: gpu_idle
+        expr: gpu_memory_used_MiB < 2048 and gpu_utilization_Percentage < 10

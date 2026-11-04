@@ -28,7 +28,8 @@ CERT = "/etc/nginx/tls/cloudflare/myl.moe.pem"
 KEY = "/etc/nginx/tls/cloudflare/myl.moe.key"
 ADMIN_PASSWORD = "pa$$word"
 
-# Metric names exported by nvitop-exporter (units are part of the name).
+# Metric names exported by nvitop-exporter (units are part of the name), plus
+# the recording rule Prometheus derives from them.
 KNOWN_METRICS = {
     "gpu_utilization_Percentage",
     "gpu_memory_used_MiB",
@@ -37,6 +38,7 @@ KNOWN_METRICS = {
     "gpu_temperature_C",
     "process_gpu_memory_MiB",
     "process_gpu_sm_utilization_Percentage",
+    "gpu_idle",
 }
 
 
@@ -83,11 +85,29 @@ class PrometheusConfigTest(unittest.TestCase):
         )
         assert config is not None
         self.assertEqual(config["global"]["scrape_interval"], "1s")
+        self.assertEqual(
+            config["rule_files"], ["/etc/prometheus/prometheus-rules.yml"]
+        )
         job = config["scrape_configs"][0]
         self.assertEqual(job["job_name"], "cityu-gpu")
         self.assertEqual(
             job["static_configs"][0]["targets"],
             ["100.104.99.124:8000", "100.67.212.32:8000"],
+        )
+
+
+class PrometheusRulesTest(unittest.TestCase):
+    def test_idle_rule(self) -> None:
+        with (FILES_DIR / "prometheus-rules.yml").open() as f:
+            rules = yaml.safe_load(f)
+        assert rules is not None
+        rule = rules["groups"][0]["rules"][0]
+        self.assertEqual(rule["record"], "gpu_idle")
+        # The idle verdict's single source: the dashboard stat and the public
+        # agent query both read gpu_idle, so the thresholds live only here.
+        self.assertEqual(
+            rule["expr"],
+            "gpu_memory_used_MiB < 2048 and gpu_utilization_Percentage < 10",
         )
 
 
@@ -111,12 +131,19 @@ class ComposeTest(unittest.TestCase):
         # compose `command` replaces the image CMD, so the full arg set matters
         self.assertIn("--config.file=/etc/prometheus/prometheus.yml", prometheus["command"])
         self.assertIn("--storage.tsdb.path=/prometheus", prometheus["command"])
+        self.assertIn(
+            "./prometheus-rules.yml:/etc/prometheus/prometheus-rules.yml:ro",
+            prometheus["volumes"],
+        )
         grafana = compose["services"]["grafana"]
         self.assertEqual(grafana["image"], "grafana/grafana:latest")
         self.assertEqual(grafana["ports"], ["127.0.0.1:50019:3000"])
         env = grafana["environment"]
         # No anonymous access: the panel is public but behind a real login.
         self.assertIn("GF_USERS_ALLOW_SIGN_UP=false", env)
+        # The agent-query panel's copy button uses an inline onclick, which the
+        # text panel sanitizer would strip.
+        self.assertIn("GF_PANELS_DISABLE_SANITIZE_HTML=true", env)
         self.assertIn("GF_SERVER_ROOT_URL=https://cityu-gpu.myl.moe", env)
         self.assertIn(
             "GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/cityu-gpu.json",
@@ -161,10 +188,12 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(types.count("stat"), 3)
         self.assertEqual(types.count("table"), 2)
         self.assertEqual(types.count("timeseries"), 2)
+        self.assertEqual(types.count("text"), 1)
         titles = [panel["title"] for panel in self.dashboard["panels"]]
         self.assertIn("空闲 GPU", titles)
         self.assertIn("逐卡状态", titles)
         self.assertIn("逐用户占用", titles)
+        self.assertIn("Agent 查询", titles)
 
     def test_queries_reference_known_metrics(self) -> None:
         exprs = [
@@ -178,13 +207,40 @@ class DashboardTest(unittest.TestCase):
                 any(metric in expr for metric in KNOWN_METRICS),
                 f"expression references no known metric: {expr}",
             )
-        # The idle count must combine the memory and utilization thresholds,
-        # and fall back to 0 when every GPU is busy (count of an empty set
-        # yields no sample, which would render as No data instead of 0).
+        # The idle stat reads the recording rule so the panel and the public
+        # agent query share one idle verdict, and falls back to 0 when every
+        # GPU is busy (count of an empty set yields no sample, which would
+        # render as No data instead of 0).
         idle = exprs[0]
-        self.assertIn("gpu_memory_used_MiB < 2048", idle)
-        self.assertIn("gpu_utilization_Percentage < 10", idle)
-        self.assertIn("or vector(0)", idle)
+        self.assertEqual(idle, "count(gpu_idle) or vector(0)")
+
+    def test_agent_query_panel_carries_the_copyable_command(self) -> None:
+        panel = next(
+            p for p in self.dashboard["panels"] if p["title"] == "Agent 查询"
+        )
+        self.assertEqual(panel["type"], "text")
+        options = panel["options"]
+        # HTML mode: the panel ships a real copy button whose inline onclick
+        # the sanitizer would strip, paired with an unsanitized-HTML env var
+        # asserted in ComposeTest.
+        self.assertEqual(options["mode"], "html")
+        content = options["content"]
+        self.assertIn('id="gpu-agent-cmd"', content)
+        self.assertIn("onclick=", content)
+        self.assertIn("navigator.clipboard.writeText", content)
+        # The copied block is addressed to the agent, which runs the command
+        # itself: instruction, curl, and how to read the response.
+        self.assertIn("帮我查", content)
+        self.assertIn(
+            "curl -s -u \"USER:PASSWORD\" 'https://cityu-gpu.myl.moe/"
+            "api/datasources/proxy/uid/prometheus/api/v1/query"
+            "?query=count(gpu_idle)%20or%20vector(0)'",
+            content,
+        )
+        self.assertIn("data.result[0].value[1]", content)
+        # Credentials stay with the user: the panel ships a placeholder only.
+        self.assertIn("USER:PASSWORD", content)
+        self.assertNotIn(ADMIN_PASSWORD, content)
 
     def test_table_value_columns_are_renamed(self) -> None:
         # Multi-target tables name their value fields "Value #A"; a
@@ -225,7 +281,10 @@ class DashboardTest(unittest.TestCase):
         )
         uid = datasource["datasources"][0]["uid"]
         for panel in self.dashboard["panels"]:
-            self.assertEqual(panel["datasource"]["uid"], uid)
+            # Text panels (the agent query note) carry no datasource.
+            datasource_uid = panel.get("datasource", {}).get("uid")
+            if datasource_uid is not None:
+                self.assertEqual(datasource_uid, uid)
 
 
 if __name__ == "__main__":

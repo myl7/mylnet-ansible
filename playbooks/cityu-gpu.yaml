@@ -225,6 +225,15 @@
         mode: "0644"
       notify: Recreate containers
 
+    - name: Copy the prometheus rules
+      ansible.builtin.copy:
+        src: cityu-gpu/prometheus-rules.yml
+        dest: "{{ stack_dir }}/prometheus-rules.yml"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: "0644"
+      notify: Recreate containers
+
     - name: Copy the Grafana datasource provisioning
       become: true
       ansible.builtin.copy:
@@ -522,6 +531,29 @@
         url_password: "{{ cityu_gpu_panel_password }}"
         force_basic_auth: true
         status_code: 200
+
+    # Exercises the exact route the documented agent query uses, so a Grafana
+    # upgrade that drops the datasource proxy API fails the deploy, not the
+    # agents.
+    - name: Query gpu_idle through the public API
+      when: not ansible_check_mode
+      ansible.builtin.uri:
+        url: "https://{{ cityu_gpu_domain }}/api/datasources/proxy/uid/prometheus/api/v1/query?query=count(gpu_idle)%20or%20vector(0)"
+        use_proxy: false
+        url_username: cityu
+        url_password: "{{ cityu_gpu_panel_password }}"
+        force_basic_auth: true
+        return_content: true
+      register: cityu_gpu_agent_query
+
+    - name: Check the agent query result
+      ansible.builtin.assert:
+        that:
+          - cityu_gpu_agent_query.json.data.resultType == "vector"
+          - cityu_gpu_agent_query.json.data.result | length == 1
+          - cityu_gpu_agent_query.json.data.result[0].value[1] is match('^\d+$')
+        fail_msg: "The public gpu_idle query does not return an idle count; check the recording rule and the panel login"
+        quiet: true
 
     - name: Record the panel URL
       ansible.builtin.debug:

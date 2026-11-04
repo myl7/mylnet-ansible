@@ -9,6 +9,7 @@ services:
     volumes:
       - /srv/cityu-gpu/prometheus:/prometheus
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-rules.yml:/etc/prometheus/prometheus-rules.yml:ro
     ports:
       - "127.0.0.1:{{ cityu_gpu_prometheus_local_port }}:9090"
     logging:
@@ -22,6 +23,10 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD={{ cityu_gpu_grafana_admin_password | replace("$", "$$") }}
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Lets the Agent 查询 panel's inline-onclick copy button run; only
+      # admins can edit dashboards (the shared account is a Viewer), so the
+      # unsanitized-HTML surface is admins alone.
+      - GF_PANELS_DISABLE_SANITIZE_HTML=true
       # Default 10m: rotation does a full-page /login redirect dance, which
       # bounces viewers mid-session. Once a day is plenty for this panel.
       - GF_AUTH_TOKEN_ROTATION_INTERVAL_MINUTES=1440

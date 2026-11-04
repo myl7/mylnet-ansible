@@ -17,6 +17,9 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
     数据在 `/srv/cityu-gpu/prometheus`;
   - Grafana `127.0.0.1:50019`,登录后首页即 CityU GPU dashboard,
     数据在 `/srv/cityu-gpu/grafana`。
+- Prometheus 评估 recording rule `gpu_idle`(规则文件随 playbook 部署):
+  空闲的卡才有序列,值是该卡已用显存 MiB。空闲判定在此单点定义,面板的
+  空闲数与下文 Agent query 共用。
 - sg1 nginx 站点 `cityu-gpu.myl.moe`(Cloudflare proxied,泛域名 origin 证书)
   纯反代到 Grafana。认证在 Grafana 自己的登录页:共享 viewer 账号 `cityu`
   (密码存 secrets,首次建号时由 playbook 写入),会话 cookie 默认 30 天。公网只暴露这一个入口。
@@ -51,13 +54,50 @@ venv、sg1 的 compose 栈与 `/srv/cityu-gpu` 数据目录、nginx 反代站点
 - 改面板:改 `playbooks/files/cityu-gpu/grafana/dashboards/cityu-gpu.json` 重跑
   playbook;Grafana 的 file provider 每 10s 热加载,通常不需要重跑。想用官方
   nvitop 面板,在 Grafana UI 按 dashboard ID 22589 手动导入。
-- 空闲判定阈值(显存 2048 MiB / 利用率 10)在 dashboard JSON 的 stat 查询里。
+- 空闲判定阈值(显存 2048 MiB / 利用率 10)在 Prometheus 规则文件
+  `playbooks/files/cityu-gpu/prometheus-rules.yml` 里,dashboard 空闲数与
+  Agent 查询共用。改阈值重跑 playbook,规则文件变更会重建 Prometheus 容器。
+
+## Agent query
+
+Agent 或任何脚本可以从公网直接查询空闲 GPU,复用面板的 Grafana 登录做
+basic auth,不新增接口与服务。dashboard 底部「Agent 查询」面板有一段面向
+Agent 的完整指令,点「复制」按钮整段发给你的 Agent(发送前把 `USER:PASSWORD`
+换成登录账密 `cityu` + `cityu_gpu_panel_password`,或把账密另行发给它),
+Agent 自己执行并回报空闲卡数:
+
+```sh
+curl -s -u "cityu:$CITYU_GPU_PASSWORD" 'https://cityu-gpu.myl.moe/api/datasources/proxy/uid/prometheus/api/v1/query?query=count(gpu_idle)%20or%20vector(0)'
+```
+
+Grafana 把这条 datasource proxy 路由代理给内部 Prometheus。查询要 URL 编码
+(空格 `%20`,`<` 是 `%3C`)。常用三个:
+
+| 问题 | 查询 |
+|---|---|
+| 空闲 GPU 数 | `count(gpu_idle) or vector(0)` |
+| 哪些卡空闲 | `gpu_idle` |
+| 总卡数 | `count(gpu_memory_total_MiB)` |
+
+响应是 Prometheus 原生 JSON。空闲数取 `data.result[0].value[1]`;逐卡明细
+一条序列一张卡,labels 有 `hostname` 和 `index`:
+
+```sh
+curl -s -u "cityu:$CITYU_GPU_PASSWORD" 'https://cityu-gpu.myl.moe/api/datasources/proxy/uid/prometheus/api/v1/query?query=gpu_idle' \
+  | jq -r '.data.result[].metric | "\(.hostname) \(.index)"'
+```
+
+- 401 是账密错误或密码已轮换;轮换面板密码后 Agent 侧的环境变量要同步换。
+- 数据最多约 2 秒旧(exporter 1s 采集,Prometheus 1s 抓取)。
 
 ## Quirks
 
 - 不用 nginx basic auth:面板 5 秒自动刷新时,浏览器(尤其 iOS Safari)会对
   XHR 反复弹出 basic auth 输入框,完全无法使用。Grafana 原生登录发会话
   cookie,刷新无感。
+- Grafana 开着 `GF_PANELS_DISABLE_SANITIZE_HTML=true`,否则「Agent 查询」面板
+  复制按钮的内联 onclick 会被 sanitizer 剥掉。能编辑 dashboard 的只有 admin
+  (共享账号是 Viewer),未净化 HTML 的注入面等同 admin 本身。
 - 表格面板多查询合并后,值列的原始字段名是 `Value #A` 形态,organize
   transform 必须按这个键名改名,否则列头不可读(测试有回归断言)。
 

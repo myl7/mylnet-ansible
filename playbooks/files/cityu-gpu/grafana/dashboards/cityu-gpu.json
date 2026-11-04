@@ -63,7 +63,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "count(gpu_memory_used_MiB < 2048 and gpu_utilization_Percentage < 10) or vector(0)",
+          "expr": "count(gpu_idle) or vector(0)",
           "instant": true,
           "legendFormat": "__auto",
           "refId": "A"
@@ -618,6 +618,22 @@
       ],
       "title": "GPU 显存占用",
       "type": "timeseries"
+    },
+    {
+      "description": "整段复制发给 Agent 的查询指令, 账密自己填",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "id": 8,
+      "options": {
+        "content": "<p>复制下面整段发给你的 Agent, 它会自己执行并回报空闲卡数。发送前先把 <code>USER:PASSWORD</code> 换成面板登录账密, 或把账密另行发给它:</p>\n<div style=\"display:flex;gap:8px;align-items:flex-start;\">\n<button type=\"button\" onclick=\"(function(b){var t=document.getElementById('gpu-agent-cmd').innerText;function ok(){b.textContent='已复制';setTimeout(function(){b.textContent='复制'},2000)}if(navigator.clipboard&amp;&amp;navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok)}else{var x=document.createElement('textarea');x.value=t;document.body.appendChild(x);x.select();document.execCommand('copy');x.remove();ok()}})(this)\" style=\"padding:4px 14px;flex-shrink:0;\">复制</button>\n<pre id=\"gpu-agent-cmd\" style=\"flex:1;margin:0;padding:8px;border-radius:4px;background:rgba(128,128,128,0.15);white-space:pre-wrap;overflow-wrap:anywhere;\">帮我查 cityu GPU 服务器(cs11369a 与 cs659b, 两台共 6 张卡)现在有多少张空闲 GPU。执行下面命令, 其中的 USER:PASSWORD 替换为我给你的面板登录凭证(用户名 cityu):\ncurl -s -u \"USER:PASSWORD\" 'https://cityu-gpu.myl.moe/api/datasources/proxy/uid/prometheus/api/v1/query?query=count(gpu_idle)%20or%20vector(0)'\n返回 JSON 的 data.result[0].value[1] 就是空闲 GPU 数。需要逐卡明细时, 把 URL 里 query= 后面换成 gpu_idle 再查一次, 每条结果的 labels.hostname 与 labels.index 指明空闲卡在哪台机器哪个编号。</pre>\n</div>",
+        "mode": "html"
+      },
+      "title": "Agent 查询",
+      "type": "text"
     }
   ],
   "refresh": "5s",
