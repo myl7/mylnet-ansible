@@ -155,7 +155,6 @@
   vars:
     stack_dir: /opt/stacks/cityu-gpu
     cityu_gpu_exporter_port: 8000
-    gpu_idle_kill_port: 8001
     cityu_gpu_prometheus_local_port: 50020
     cityu_gpu_grafana_local_port: 50019
 
@@ -380,20 +379,6 @@
                 | selectattr('health', 'equalto', 'up')
                 | list | length == cityu_gpu_exporters | length
             fail_msg: "Prometheus does not see both cityu exporters as up; check tailnet reachability and ACLs from sg1"
-            quiet: true
-
-        - name: Check the gpu-idle-kill scrape targets
-          ansible.builtin.assert:
-            that:
-              - >-
-                cityu_gpu_targets.json.data.activeTargets
-                | selectattr('labels.job', 'equalto', 'gpu-idle-kill')
-                | selectattr('health', 'equalto', 'up')
-                | list | length == cityu_gpu_exporters | length
-            fail_msg: >-
-              Prometheus does not see both gpu-idle-kill targets as up; run
-              playbooks/gpu-idle-kill.yaml first, and allow sg1 to reach the
-              cityu hosts on port {{ gpu_idle_kill_port }} in the tailnet ACL
             quiet: true
 
         - name: Read Prometheus build info

@@ -359,7 +359,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "占用显卡的每个用户和进程。可结束倒计时是进程再闲置多久后, 任何用户都能登录机器用 gpu-idle-kill 结束它, 期间有任何计算就重新计时。",
+      "description": "占用显卡的每个用户和进程。",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -380,20 +380,7 @@
             ]
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "可结束倒计时"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "dtdurations"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -413,34 +400,15 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "label_join(process_gpu_memory_MiB, \"proc\", \"-\", \"hostname\", \"index\", \"pid\")",
+          "expr": "process_gpu_memory_MiB",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (proc) (label_join(gpu_idle_kill_in_seconds, \"proc\", \"-\", \"hostname\", \"index\", \"pid\"))",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "refId": "B"
         }
       ],
       "title": "逐用户占用",
       "transformations": [
-        {
-          "id": "joinByField",
-          "options": {
-            "byField": "proc",
-            "mode": "outer"
-          }
-        },
         {
           "id": "organize",
           "options": {
@@ -450,7 +418,6 @@
               "devicename": true,
               "instance": true,
               "job": true,
-              "proc": true,
               "uuid": true
             },
             "indexByName": {
@@ -458,12 +425,10 @@
               "index": 1,
               "username": 2,
               "pid": 3,
-              "Value #A": 4,
-              "Value #B": 5
+              "Value": 4
             },
             "renameByName": {
-              "Value #A": "GPU 显存 MiB",
-              "Value #B": "可结束倒计时",
+              "Value": "GPU 显存 MiB",
               "hostname": "主机",
               "index": "卡",
               "pid": "PID",
