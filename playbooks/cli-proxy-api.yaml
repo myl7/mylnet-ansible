@@ -165,11 +165,11 @@
     - name: Apply pending container and nginx changes
       ansible.builtin.meta: flush_handlers
 
-    - name: Migrate and verify CLI Proxy API v8
+    - name: Converge and verify CLI Proxy API
       tags: cliproxy_verify
       ansible.builtin.script:
         cmd: >-
-          {{ playbook_dir }}/../scripts/ensure_cliproxy_v8.py
+          {{ playbook_dir }}/../scripts/ensure_cliproxy.py
           --config {{ stack_dir }}/config.yaml
           --url http://127.0.0.1:{{ cliproxy_local_port }}
           --compatible-model deepseek-v4-flash

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Migrate a running CLIProxyAPI through its v8 API and verify local health."""
+"""Converge a running CLIProxyAPI's runtime config through its v8 management API and verify local health."""
 
 import argparse
 import copy
