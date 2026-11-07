@@ -22,44 +22,28 @@ The template renders twice, selected by the `clash_tailnet` variable:
 
 ## What the subscription adds
 
-- `TAILNET` proxy: an embedded tsnet client. It is non-ephemeral, enables UDP,
-  accepts advertised subnet routes, and stores its identity in
-  `state-dir: ./tailscale` inside FlClash's private storage.
-- `ts-underlay` select group: the underlay selector for the `TAILNET`
-  outbound (control plane, DERP, WireGuard), currently dormant — the
-  subscription's TAILNET outbound carries no `dialer-proxy` until a FlClash
-  release ships a core with the wildcard proxydialer fix for
-  [mihomo#3142](https://github.com/MetaCubeX/mihomo/issues/3142) (the fix is
-  in FlClash's core as of 2026-10-12 but ahead of the v0.8.99 release;
-  cores without it drop all tailnet traffic once `dialer-proxy` is set).
-  When it ships, add `dialer-proxy: ts-underlay` to the TAILNET outbound.
-- Tailnet proxy nodes: `<host>-tailnet` for every proxy host (bwh, sg1,
-  jp1) plus `cu-tailnet`. Each is the machine's proxy service dialed at its
-  tailnet IP through the TAILNET outbound (`dialer-proxy: TAILNET` on the
-  node, a plain TCP chain that works on stock cores), so it is usable
-  wherever the tailnet is reachable, also when the public endpoint is not.
-  `cu-tailnet` is cu's SOCKS at the cityu-print transport port and egresses
-  on the CityU campus network. The `proxy` group lists them all; `cn` lists
-  `cu-tailnet`. They must never join `ts-underlay` (they dial through
-  TAILNET and would loop).
-- DNS: `nameserver-policy` resolves `*.tailnet-d39d.ts.net` via `ts://TAILNET`;
-  every other domain keeps the existing nameservers. Bare short names
-  (`http://sg1:50015`) are NOT supported: neither mihomo (no search-domains
-  option) nor the tailscale outbound expands DNS search domains, so use the
-  full `*.tailnet-d39d.ts.net` names.
-- Rules: the tailnet domain, `100.64.0.0/10` (tailnet range), and
-  `100.100.100.100/32` (MagicDNS resolver) route to `TAILNET` ahead of the
-  private-range DIRECT rules that would otherwise capture them.
+The tailnet wiring lives in `playbooks/templates/proxy/clash.yaml.j2` with
+comments: the `TAILNET` tsnet outbound (identity persisted in its
+`state-dir` inside FlClash's private storage), the `<host>-tailnet` and
+`cu-tailnet` nodes dialed through it, the DNS policy, and the tailnet
+rules. Two behavioral facts the template alone does not settle:
+
+- The tailnet flavor requires a core with the wildcard proxydialer fix
+  ([mihomo#3142](https://github.com/MetaCubeX/mihomo/issues/3142)); the
+  phone runs the myl7 self-build fork with the fix. The TAILNET outbound
+  carries `dialer-proxy: ts-underlay`, and stock cores drop all tailnet
+  traffic with that set, so stock-core devices must use the plain flavor.
+- Bare short names (`http://sg1:50015`) are NOT supported: neither mihomo
+  (no search-domains option) nor the tailscale outbound expands DNS search
+  domains, so use the full `*.tailnet-d39d.ts.net` names.
 
 ## Requirements
 
-- FlClash >= 0.8.93 (bundled mihomo core has tailscale support; 0.8.99 is
-  current as of 2026-10). The `<host>-tailnet` nodes work on these stock
-  cores: their `dialer-proxy: TAILNET` is a TCP-only chain.
-- A core with the wildcard proxydialer fix (mihomo#3142) is additionally
-  needed only for the dormant ts-underlay underlay switching; the
-  subscription deliberately ships without it until a FlClash release
-  carries the fixed core.
+- Plain flavor: FlClash >= 0.8.93 (bundled mihomo core has tailscale
+  support). The `<host>-tailnet` nodes work on these stock cores: their
+  `dialer-proxy: TAILNET` is a TCP-only chain.
+- Tailnet flavor: additionally the fixed-core build (mihomo#3142), see
+  above.
 
 ## First login
 
@@ -137,7 +121,7 @@ outbound, e.g. `... --> TAILNET[domain]` or `... --> DIRECT`.
 | Tailscale unavailable | ordinary proxy traffic still works |
 | Select `sg1-tailnet` in `proxy` | traffic flows, log shows the vless over `TAILNET` |
 | Select `cu-tailnet` in `cn` | campus sites load, egress IP is CityU's |
-| Switch ts-underlay to a VLESS node | only after a FlClash release carries the fixed core |
+| Switch ts-underlay to a VLESS node | tailnet still reachable on the fixed core |
 
 For the UDP row, an echo server on `cu` port 35353/udp (started for the
 acceptance run, auto-expires after 24h):

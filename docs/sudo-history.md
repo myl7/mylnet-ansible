@@ -5,11 +5,10 @@ sudo, when, from which directory, and as whom. Deployed by
 `playbooks/sudo-history.yaml`; the knobs live in the playbook's `vars`
 (no group_vars, no secrets).
 
-```
-cs11369a  /var/log/sudo.log              local events, forwarded to cs659b
-cs659b    /var/log/sudo.log              merged history: own events + cs11369a's
-cs11369a  /var/log/sudo-journal-rescue.log   sudo events rescued from the /run journal
-```
+cs659b's `/var/log/sudo.log` is the merged history: its own events plus
+cs11369a's forwarded ones, one hostname per line. Each host also keeps its
+local `/var/log/sudo.log`, and cs11369a carries the one-time
+`/var/log/sudo-journal-rescue.log` (see below).
 
 Every sudo invocation — allowed or denied — already travels as an
 authpriv message. rsyslog re-files those into `/var/log/sudo.log` on each
@@ -50,9 +49,8 @@ when a machine was down or unreachable.
 
 ## Retention
 
-`logrotate` rotates `/var/log/sudo.log` weekly, keeps 52 compressed
-copies (~a year; `sudo.log.1` stays plain via `delaycompress`). The
-rescue export never rotates: it is a fixed snapshot.
+`/var/log/sudo.log` keeps about a year of rotated copies. The rescue
+export never rotates: it is a fixed snapshot.
 
 ## cs11369a journal rescue
 
@@ -73,14 +71,8 @@ on the Mylnet hosts can be reconsidered.
 
 ## Operations
 
-- Receiver down: the forwarder on cs11369a queues to disk (up to 10M in
-  `/var/spool/rsyslog/`) and retries forever; the local copy on cs11369a
-  is unaffected.
-- cs659b listens on 514/tcp **on its tailnet IP only** (`100.67.212.32`),
-  and `$AllowedSender` limits senders to the cityu tailnet addresses, so
-  the campus network can neither reach nor spoof the input. If a firewall
-  is ever installed on cs659b, allow 514/tcp on the tailscale interface.
-- Re-running the playbook converges; it is safe any time.
+- If a firewall is ever installed on cs659b, allow 514/tcp on the
+  tailscale interface (the receiver binds the tailnet IP only).
 
 ## Manual cleanup scope
 

@@ -1,9 +1,8 @@
 # uptime
 
-uptime-kuma 部署在 sg1(`playbooks/uptime.yaml`,容器 `127.0.0.1:50005`,nginx
-反代 `uptime.myl.moe`)。监控项不是部署产物:kuma 2 构建里没有管理 API,只有
-socket.io + 管理员登录,所以监控项在 UI 手工维护,本文件是仓库侧清单,改动
-监控时两边同步。
+uptime-kuma 部署在 sg1(`playbooks/uptime.yaml`)。监控项不是部署产物:kuma 2
+构建里没有管理 API,只有 socket.io + 管理员登录,所以监控项在 UI 手工维护,
+本文件是仓库侧清单,改动监控时两边同步。
 
 ## 监控清单
 

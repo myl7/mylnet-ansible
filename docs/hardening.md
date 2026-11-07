@@ -61,10 +61,9 @@ findings table lives in this file's git history before 2026-10-08.
 
 ## CLI SMTP restored in Init
 
-CLI mail remains useful independently of scheduled security reports. Its
-`msmtp-mta` installation, `/etc/msmtprc` template, local aliases, and SMTP
-variable checks now belong to `playbooks/init.yaml`. The SMTP secret block is
-labelled `init.yaml (CLI system mail)` in the separate secrets repository.
+CLI mail remains useful independently of scheduled security reports and now
+belongs to `playbooks/init.yaml`. The SMTP secret block is labelled
+`init.yaml (CLI system mail)` in the separate secrets repository.
 
 To configure only SMTP on existing hosts without applying the other Init tasks:
 

@@ -9,9 +9,8 @@
 - 目标：`sg1` / `key.myl.moe`，SSH `myl@167.104.101.86:50000`。
 - 线上二进制与 `/api/version` 均为 **1.37.3**，容器健康。
 - 旧镜像：`vaultwarden/server:latest-alpine`；只读检查时的 image ID 和 RepoDigest 均指向 `sha256:9a905c5cf5df61bb827da3805e160170741c0b53b0c63bb07e1afd3d2e21b1c8`。部署前重新记录，不依赖此快照。
-- 挂载：`/srv/vaultwarden/data:/data`；默认 SQLite，存在 `db.sqlite3`，未设置自定义 `DATABASE_URL`；`config.json` 不存在。
+- 数据库为默认 SQLite（存在 `db.sqlite3`，未设置自定义 `DATABASE_URL`）；`config.json` 不存在。
 - 宿主架构：`x86_64`；Docker Compose `v5.5.1`。
-- 部署使用 `latest-alpine`，每次执行 playbook 都拉取镜像，去除重复容器重建，等待健康并记录实际版本、核对镜像 ID 和检查数据库连接。端口、令牌、注册策略和可信代理设置保持原样。
 
 ## 执行记录（2026-10-08）
 
@@ -97,7 +96,7 @@ ansible-playbook playbooks/vaultwarden.yaml --syntax-check
 ansible-playbook playbooks/vaultwarden.yaml --limit sg1
 ```
 
-不要加 `--diff`、`-v` 或打印 `docker compose config`，以免显示管理员令牌。正常执行会重新拉取 `latest-alpine`，Compose 自行按需重建一次，最长等待健康 120 秒，应用 Nginx handler，然后读取本机 `/api/version`、核对运行镜像 ID 与本次拉取标签的镜像 ID 一致，输出实际版本和镜像 ID，并检查 `/api/alive == 200`。浮动标签可能在预拉取与 playbook 执行之间变化，以 playbook 完成时记录的实际版本和镜像 ID 为准；部署前的镜像摘要仅是预拉取快照。失败时保留备份，按失败阶段诊断或执行下面的回滚；playbook 不会自动恢复数据库。
+不要加 `--diff`、`-v` 或打印 `docker compose config`，以免显示管理员令牌。浮动标签可能在预拉取与 playbook 执行之间变化，以 playbook 完成时记录的实际版本和镜像 ID 为准；部署前的镜像摘要仅是预拉取快照。失败时保留备份，按失败阶段诊断或执行下面的回滚；playbook 不会自动恢复数据库。
 
 ### 3. 部署验证
 
@@ -155,28 +154,6 @@ nginx -s reload
 ```
 
 随后重复本地/公网版本及健康验证，版本应与备份中的 `version.txt` 一致。回滚时用覆盖文件指定保留下来的旧镜像，不重新拉取会漂移的 `latest-alpine`。保留并记录此覆盖文件的使用方式；在升级问题解决前，不要重新运行会拉取 `latest-alpine` 的 playbook。旧版本仍有安全漏洞，回滚只是恢复可用性的临时措施。
-
-## 初次修复验证记录（2026-10-07，固定版本方案）
-
-本次使用不含真实 secrets 的临时副本和占位令牌进行检查：
-
-- Ansible 语法检查、主机列表和任务列表通过，目标仅 `sg1`。
-- `ansible-lint --offline`：0 errors / 0 warnings，达到 production profile；Prettier 检查通过。
-- 占位 Compose 经 sg1 现有 Compose 的 `config` 只读解析通过；确认固定镜像、令牌美元符转义、回环绑定及数据卷不变。Mac 未安装 Compose 插件，因此没有本机容器启动测试。
-- 本机隔离 HTTP fixture 执行实际健康检查任务：正确版本与健康数据库通过，旧版本和数据库 503 均失败，check mode 不发出 HTTP 请求。
-- 现有仓库 15 个 Python 单元测试通过（使用 Ansible 的 Python 3.14；系统 Python 3.9 不支持现有测试依赖的 `typing.Never`）。
-- 独立审查通过；5 个操作单 Bash 代码块通过 `bash -n`。
-
-线上升级已于 2026-10-08 执行（见「执行记录」）；备份恢复演练与升级后的客户端验收仍未进行。
-
-## 浮动标签方案验证记录（2026-10-08）
-
-- Ansible 语法、lint 和格式检查通过。
-- `latest-alpine` 模板渲染通过，令牌转义、回环端口和数据卷不变。
-- 本机隔离 HTTP 服务和 Docker 命令替身验证通过：当前版本和未来版本均可通过，非法版本响应、运行镜像不一致、数据库故障会失败；check mode 不执行 HTTP 或 Docker 检查。
-- 操作单中的 5 个 Bash 代码块通过 `bash -n`。
-
-此轮验证没有连接或部署线上服务；Docker 命令验证使用隔离替身，没有启动真实容器。
 
 ## 依据
 

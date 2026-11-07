@@ -1,38 +1,25 @@
 # cityu-gpu
 
 GPU 监控面板,覆盖两台 cityu 服务器(cs11369a 4× RTX A6000,cs659b 2× RTX PRO 5000
-Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占用。刷新 5 秒,数据采集
-1 秒一次。
+Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占用。
 
 `playbooks/cityu-gpu.yaml` 部署,旋钮都在 playbook 的 `vars` 和
-`inventories/host_vars/sg1.yaml`。依赖 nvitop-exporter(NVML + psutil,进程指标
-自带 username 标签)、Prometheus、Grafana,全部开源。
+`inventories/host_vars/sg1.yaml`。
 
 ## 架构
 
-- cityu 两台各跑一个 `nvitop-exporter` systemd 服务,绑 tailnet 地址 :8000,
-  `/opt/nvitop-exporter` venv 安装,系统用户 `nvitop-exporter`,60 MB 上下。
-- sg1 跑 compose 栈(镜像浮动 tag,`restart: always`):
-  - Prometheus `127.0.0.1:50020`,每 1s 抓两台 exporter,TSDB 留 30 天,
-    数据在 `/srv/cityu-gpu/prometheus`;
-  - Grafana `127.0.0.1:50019`,登录后首页即 CityU GPU dashboard,
-    数据在 `/srv/cityu-gpu/grafana`。
+- cityu 两台各跑一个 `nvitop-exporter` systemd 服务,绑 tailnet 地址
+  :8000;sg1 跑 Prometheus + Grafana compose 栈,nginx 站点
+  `cityu-gpu.myl.moe` 纯反代到 Grafana,公网只暴露这一个入口。
 - Prometheus 评估 recording rule `gpu_idle`(规则文件随 playbook 部署):
   空闲的卡才有序列,值是该卡已用显存 MiB。空闲判定在此单点定义,面板的
   空闲数与下文 Agent query 共用。
-- sg1 nginx 站点 `cityu-gpu.myl.moe`(Cloudflare proxied,泛域名 origin 证书)
-  纯反代到 Grafana。认证在 Grafana 自己的登录页:共享 viewer 账号 `cityu`
-  (密码存 secrets,首次建号时由 playbook 写入),会话 cookie 默认 30 天。公网只暴露这一个入口。
+- 认证在 Grafana 自己的登录页:共享 viewer 账号 `cityu`(密码存 secrets,
+  首次建号时由 playbook 写入),会话 cookie 默认 30 天。
 
 边界:Mylnet 与 CityU 两个管理域,sg1 通过 `host_vars/sg1.yaml` 里的字面量
 `cityu_gpu_exporters`(host → tailnet IP)抓取 exporter,不做跨组 hostvars
 引用,同 cityu-print 的 socks 端点先例。
-
-## 文件
-
-部署产物:两台的 nvitop-exporter systemd 单元(含加固 drop-in)与 `/opt`
-venv、sg1 的 compose 栈与 `/srv/cityu-gpu` 数据目录、nginx 反代站点;具体
-路径以 playbook 任务为准。
 
 ## 先决(手动)
 
@@ -46,19 +33,15 @@ venv、sg1 的 compose 栈与 `/srv/cityu-gpu` 数据目录、nginx 反代站点
 
 ## Operations
 
-- 部署/升级:`ansible-playbook playbooks/cityu-gpu.yaml`。Prometheus 浮动 tag,
-  每次运行都会 pull;Grafana 因 13.3.0 的插件加载缺陷暂时 pin 在
-  `grafana/grafana:13.2.5`(见 Quirks),上游修复后改回 `latest`。运行版本与
-  镜像 ID 由 verify 任务打印。升级前如需回滚凭据,先在 sg1
+- 部署/升级:`ansible-playbook playbooks/cityu-gpu.yaml`。Grafana 因 13.3.0 的
+  插件加载缺陷暂时 pin 在 `grafana/grafana:13.2.5`(见 Quirks),上游修复后
+  改回 `latest`。升级前如需回滚凭据,先在 sg1
   `docker image inspect --format '{{.Id}}' <image>` 记下当前 ID。
 - exporter 升级:pip 固定 `state: present`,升级手动执行
   `sudo /opt/nvitop-exporter/bin/pip install -U nvitop-exporter && sudo systemctl restart nvitop-exporter`。
-- 改面板:改 `playbooks/files/cityu-gpu/grafana/dashboards/cityu-gpu.json` 重跑
-  playbook;Grafana 的 file provider 每 10s 热加载,通常不需要重跑。想用官方
-  nvitop 面板,在 Grafana UI 按 dashboard ID 22589 手动导入。
-- 空闲判定阈值(显存 2048 MiB / 利用率 10)在 Prometheus 规则文件
-  `playbooks/files/cityu-gpu/prometheus-rules.yml` 里,dashboard 空闲数与
-  Agent 查询共用。改阈值重跑 playbook,规则文件变更会重建 Prometheus 容器。
+- 改面板:改 dashboard JSON 后 Grafana 的 file provider 每 10s 热加载,通常
+  不需要重跑 playbook。想用官方 nvitop 面板,在 Grafana UI 按 dashboard ID
+  22589 手动导入。
 
 ## Agent query
 
