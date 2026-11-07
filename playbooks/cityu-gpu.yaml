@@ -157,6 +157,10 @@
     cityu_gpu_exporter_port: 8000
     cityu_gpu_prometheus_local_port: 50020
     cityu_gpu_grafana_local_port: 50019
+    # Pinned, not floating: 13.3.0's frontend cannot import datasource plugins
+    # ("Could not load plugin"; every data panel errors, reproduced on a clean
+    # instance with only a prometheus datasource). Unpin to latest once fixed.
+    cityu_gpu_grafana_image: grafana/grafana:13.2.5
 
   pre_tasks:
     - name: Check cityu_gpu_domain, cityu_gpu_cert, cityu_gpu_key, and cityu_gpu_exporters
@@ -420,7 +424,7 @@
               - inspect
               - --format
               - "{{ '{{.Id}}' }}"
-              - grafana/grafana:latest
+              - "{{ cityu_gpu_grafana_image }}"
           register: cityu_gpu_grafana_image
           changed_when: false
 

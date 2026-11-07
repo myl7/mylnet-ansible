@@ -16,7 +16,7 @@ services:
       driver: local
 
   grafana:
-    image: grafana/grafana:latest
+    image: {{ cityu_gpu_grafana_image }}
     restart: always
     environment:
       - GF_SERVER_ROOT_URL=https://{{ cityu_gpu_domain }}

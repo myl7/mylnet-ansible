@@ -32,6 +32,8 @@ DOMAIN = "cityu-gpu.myl.moe"
 CERT = "/etc/nginx/tls/cloudflare/myl.moe.pem"
 KEY = "/etc/nginx/tls/cloudflare/myl.moe.key"
 ADMIN_PASSWORD = "pa$$word"
+# Pinned like the playbook var: 13.3.0 cannot import datasource plugins.
+GRAFANA_IMAGE = "grafana/grafana:13.2.5"
 
 # Metric names nvitop-exporter exports (units are part of the name). Any
 # other metric a query references must be a recording rule in
@@ -75,6 +77,7 @@ def render_compose() -> Any:
             cityu_gpu_grafana_admin_password=ADMIN_PASSWORD,
             cityu_gpu_prometheus_local_port=PROM_LOCAL_PORT,
             cityu_gpu_grafana_local_port=GRAFANA_LOCAL_PORT,
+            cityu_gpu_grafana_image=GRAFANA_IMAGE,
         )
     )
 
@@ -312,8 +315,18 @@ class DashboardTest(unittest.TestCase):
         )
         argv = shlex.split(command)
         self.assertEqual(argv[0], "curl")
-        # Credentials come from the sender, not baked into the panel.
-        self.assertIn(":", argv[argv.index("-u") + 1])
+        # Credentials live in ~/.netrc, never in the command: agents'
+        # credential rules reject inline passwords (a Claude Desktop session
+        # refused to run exactly that), so -u must not appear at all.
+        self.assertIn("-n", argv)
+        self.assertNotIn("-u", argv)
+        copied_text = copied.group(1)
+        self.assertIn("~/.netrc", copied_text)
+        # The real response paths: labels live under the metric object.
+        self.assertIn("metric.hostname", copied_text)
+        self.assertIn("metric.index", copied_text)
+        # Auth failure must stop the agent, not send it credential-hunting.
+        self.assertIn("401", copied_text)
         url = urlsplit(next(arg for arg in argv if arg.startswith("https://")))
         self.assertEqual(url.scheme, "https")
         self.assertEqual(url.hostname, DOMAIN)

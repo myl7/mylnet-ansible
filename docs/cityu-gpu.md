@@ -46,9 +46,11 @@ venv、sg1 的 compose 栈与 `/srv/cityu-gpu` 数据目录、nginx 反代站点
 
 ## Operations
 
-- 部署/升级:`ansible-playbook playbooks/cityu-gpu.yaml`。镜像浮动 tag,每次
-  运行都会 pull;运行版本与镜像 ID 由 verify 任务打印。升级前如需回滚凭据,
-  先在 sg1 `docker image inspect --format '{{.Id}}' <image>` 记下当前 ID。
+- 部署/升级:`ansible-playbook playbooks/cityu-gpu.yaml`。Prometheus 浮动 tag,
+  每次运行都会 pull;Grafana 因 13.3.0 的插件加载缺陷暂时 pin 在
+  `grafana/grafana:13.2.5`(见 Quirks),上游修复后改回 `latest`。运行版本与
+  镜像 ID 由 verify 任务打印。升级前如需回滚凭据,先在 sg1
+  `docker image inspect --format '{{.Id}}' <image>` 记下当前 ID。
 - exporter 升级:pip 固定 `state: present`,升级手动执行
   `sudo /opt/nvitop-exporter/bin/pip install -U nvitop-exporter && sudo systemctl restart nvitop-exporter`。
 - 改面板:改 `playbooks/files/cityu-gpu/grafana/dashboards/cityu-gpu.json` 重跑
@@ -62,12 +64,21 @@ venv、sg1 的 compose 栈与 `/srv/cityu-gpu` 数据目录、nginx 反代站点
 
 Agent 或任何脚本可以从公网直接查询空闲 GPU,复用面板的 Grafana 登录做
 basic auth,不新增接口与服务。dashboard 底部「Agent 查询」面板有一段面向
-Agent 的完整指令,点「复制」按钮整段发给你的 Agent(发送前把 `USER:PASSWORD`
-换成登录账密 `cityu` + `cityu_gpu_panel_password`,或把账密另行发给它),
-Agent 自己执行并回报空闲卡数:
+Agent 的完整指令,点「复制」按钮整段发给你的 Agent,Agent 自己执行并回报
+空闲卡数。复制块里的命令不带任何凭证,凭证由 Agent 用 `curl -n` 从
+`~/.netrc` 读取;很多 Agent(实测 Claude Desktop)的凭证规则禁止把密码写进
+命令行,原版 `curl -u "USER:PASSWORD"` 会被直接拒绝执行。给 Agent 的机器
+一次性准备(chmod 600):
 
 ```sh
-curl -s -u "cityu:$CITYU_GPU_PASSWORD" 'https://cityu-gpu.myl.moe/api/datasources/proxy/uid/prometheus/api/v1/query?query=count(gpu_idle)%20or%20vector(0)'
+echo 'machine cityu-gpu.myl.moe login cityu password <面板登录密码>' >> ~/.netrc
+chmod 600 ~/.netrc
+```
+
+查询本体(人也可以直接跑,`-n` 与 `-u "cityu:$CITYU_GPU_PASSWORD"` 等价):
+
+```sh
+curl -s -n 'https://cityu-gpu.myl.moe/api/datasources/proxy/uid/prometheus/api/v1/query?query=count(gpu_idle)%20or%20vector(0)'
 ```
 
 Grafana 把这条 datasource proxy 路由代理给内部 Prometheus。查询要 URL 编码
@@ -80,14 +91,16 @@ Grafana 把这条 datasource proxy 路由代理给内部 Prometheus。查询要 
 | 总卡数 | `count(gpu_memory_total_MiB)` |
 
 响应是 Prometheus 原生 JSON。空闲数取 `data.result[0].value[1]`;逐卡明细
-一条序列一张卡,labels 有 `hostname` 和 `index`:
+一条序列一张卡,hostname 和 index 是序列 `metric` 对象里的标签(JSON 路径
+`.metric.hostname` / `.metric.index`):
 
 ```sh
-curl -s -u "cityu:$CITYU_GPU_PASSWORD" 'https://cityu-gpu.myl.moe/api/datasources/proxy/uid/prometheus/api/v1/query?query=gpu_idle' \
+curl -s -n 'https://cityu-gpu.myl.moe/api/datasources/proxy/uid/prometheus/api/v1/query?query=gpu_idle' \
   | jq -r '.data.result[].metric | "\(.hostname) \(.index)"'
 ```
 
-- 401 是账密错误或密码已轮换;轮换面板密码后 Agent 侧的环境变量要同步换。
+- 401 是账密错误、密码已轮换或 `~/.netrc` 缺失;轮换面板密码后
+  `~/.netrc` 要同步改。
 - 数据最多约 2 秒旧(exporter 1s 采集,Prometheus 1s 抓取)。
 
 ## Quirks
@@ -98,6 +111,13 @@ curl -s -u "cityu:$CITYU_GPU_PASSWORD" 'https://cityu-gpu.myl.moe/api/datasource
 - Grafana 开着 `GF_PANELS_DISABLE_SANITIZE_HTML=true`,否则「Agent 查询」面板
   复制按钮的内联 onclick 会被 sanitizer 剥掉。能编辑 dashboard 的只有 admin
   (共享账号是 Viewer),未净化 HTML 的注入面等同 admin 本身。
+- Grafana 13.3.0(2026-11-04 时的 latest)前端无法导入 datasource 插件:面板
+  报 "Could not load plugin" / "An unexpected error happened",全部数据面板空。
+  在干净实例上只用一个 prometheus datasource + 本 dashboard 即可复现,与本栈
+  配置无关;其后台插件安装器还会把 grafana.com 上的新版插件落进
+  `/var/lib/grafana/plugins` 加剧版本错配。因此 image pin 在 13.2.5;再升级时
+  先手动清掉 sg1 的 `/srv/cityu-gpu/grafana/data/plugins` 并在浏览器实测
+  面板有数后再收工。
 - 表格面板多查询合并后,值列的原始字段名是 `Value #A` 形态,organize
   transform 必须按这个键名改名,否则列头不可读(测试有回归断言)。
 
