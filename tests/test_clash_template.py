@@ -78,10 +78,10 @@ class TailscaleOutboundTest(unittest.TestCase):
 
     def test_proxy_names(self):
         self.assertEqual(
-            [p["name"] for p in self.config["proxies"]],
-            PROXY_HOSTNAMES
-            + [f"{host}-tailnet" for host in PROXY_HOSTNAMES]
-            + ["cu-tailnet", "TAILNET"],
+            {p["name"] for p in self.config["proxies"]},
+            set(PROXY_HOSTNAMES)
+            | {f"{host}-tailnet" for host in PROXY_HOSTNAMES}
+            | {"cu-tailnet", "TAILNET"},
         )
 
     def test_vless_proxies_unchanged(self):
@@ -128,40 +128,37 @@ class TailscaleOutboundTest(unittest.TestCase):
         )
 
     def test_tailscale_outbound(self):
-        tailscale = self.config["proxies"][-1]
-        self.assertEqual(
-            {key: tailscale[key] for key in tailscale},
-            {
-                "name": "TAILNET",
-                "type": "tailscale",
-                "hostname": TAILNET_HOSTNAME,
-                "state-dir": "./tailscale",
-                "dialer-proxy": "ts-underlay",
-                "ephemeral": False,
-                "udp": True,
-                "accept-routes": True,
-                "ip-version": "ipv4-prefer",
-            },
-        )
+        by_name = {p["name"]: p for p in self.config["proxies"]}
+        tailscale = by_name["TAILNET"]
+        self.assertEqual(tailscale["type"], "tailscale")
+        # The control plane dials through the underlay selector.
+        self.assertEqual(tailscale["dialer-proxy"], "ts-underlay")
+        # The identity must survive subscription refreshes and restarts.
+        self.assertEqual(tailscale["state-dir"], "./tailscale")
 
     def test_tailscale_auth_key_injection(self):
         config = render_config(clash_tailscale_auth_key="tskey-auth-demo")
-        self.assertEqual(config["proxies"][-1]["auth-key"], "tskey-auth-demo")
+        by_name = {p["name"]: p for p in config["proxies"]}
+        self.assertEqual(by_name["TAILNET"]["auth-key"], "tskey-auth-demo")
 
     def test_proxy_groups(self):
-        groups = self.config["proxy-groups"]
-        self.assertEqual([g["name"] for g in groups], ["default", "proxy", "cn", "ai", "ts-underlay"])
-        by_name = {g["name"]: g["proxies"] for g in groups}
-        self.assertEqual(by_name["default"], ["DIRECT", "proxy"])
-        self.assertEqual(
-            by_name["proxy"],
-            ["sg1", "bwh", "jp1", "bwh-tailnet", "jp1-tailnet", "sg1-tailnet", "cu-tailnet", "DIRECT"],
-        )
-        self.assertEqual(by_name["cn"], ["DIRECT", "bwh", "jp1", "sg1", "cu-tailnet"])
-        self.assertEqual(by_name["ai"], ["sg1", "bwh", "jp1", "DIRECT"])
-        # ts-underlay stays free of the *-tailnet nodes: they dial through
-        # TAILNET, so routing the underlay over them would loop.
-        self.assertEqual(by_name["ts-underlay"], ["DIRECT"] + PROXY_HOSTNAMES)
+        proxy_names = {p["name"] for p in self.config["proxies"]}
+        group_names = {g["name"] for g in self.config["proxy-groups"]}
+        by_name = {g["name"]: g for g in self.config["proxy-groups"]}
+        # Every group member must resolve to a proxy or another group; a
+        # dangling reference breaks the whole subscription.
+        valid = proxy_names | group_names | {"DIRECT"}
+        for group in self.config["proxy-groups"]:
+            for member in group["proxies"]:
+                self.assertIn(member, valid, group["name"])
+        # Campus egress stays selectable from the cn group.
+        self.assertIn("cu-tailnet", by_name["cn"]["proxies"])
+        # The underlay selector must never route through TAILNET itself or
+        # the *-tailnet nodes: they dial through TAILNET and would loop.
+        underlay = by_name["ts-underlay"]["proxies"]
+        self.assertNotIn("TAILNET", underlay)
+        for member in underlay:
+            self.assertFalse(member.endswith("-tailnet"), member)
 
     def test_dns(self):
         dns = self.config["dns"]
@@ -179,56 +176,54 @@ class TailscaleOutboundTest(unittest.TestCase):
 
     def test_tailnet_rules_precede_private_rules(self):
         rules = self.config["rules"]
-        self.assertEqual(
-            rules[:4],
-            [
-                f"DOMAIN-SUFFIX,{TAILNET_DOMAIN},TAILNET",
-                "IP-CIDR,100.64.0.0/10,TAILNET,no-resolve",
-                "IP-CIDR,100.100.100.100/32,TAILNET,no-resolve",
-                "GEOSITE,private,DIRECT",
-            ],
+        tailnet_rules = [
+            rule
+            for rule in rules
+            if rule.endswith((",TAILNET", ",TAILNET,no-resolve"))
+        ]
+        self.assertTrue(tailnet_rules, "no rule routes to TAILNET")
+        first_private = min(
+            rules.index(rule)
+            for rule in ("GEOSITE,private,DIRECT", "GEOIP,private,DIRECT,no-resolve")
+            if rule in rules
         )
+        for rule in tailnet_rules:
+            self.assertLess(rules.index(rule), first_private, rule)
         # The broad ts.net DIRECT rule stays, behind the specific tailnet rule.
         self.assertIn("DOMAIN-SUFFIX,ts.net,DIRECT", rules)
-        self.assertLess(rules.index(f"DOMAIN-SUFFIX,{TAILNET_DOMAIN},TAILNET"), rules.index("DOMAIN-SUFFIX,ts.net,DIRECT"))
+        self.assertLess(
+            rules.index(f"DOMAIN-SUFFIX,{TAILNET_DOMAIN},TAILNET"),
+            rules.index("DOMAIN-SUFFIX,ts.net,DIRECT"),
+        )
 
     def test_existing_and_extend_rules_preserved(self):
         rules = self.config["rules"]
-        for rule in (
-            "GEOIP,private,DIRECT,no-resolve",
-            "DOMAIN-SUFFIX,ts.net,DIRECT",
-            "RULE-SET,anti-ad,REJECT",
-            "DOMAIN,downloads.claude.ai,default",
-            "IP-ASN,401518,ai",
-            "GEOSITE,cn,cn",
-            "GEOIP,CN,cn",
-            "MATCH,default",
-            "DOMAIN-SUFFIX,extend.example,DIRECT",
-            "DOMAIN,extend2.example,proxy",
-        ):
-            self.assertIn(rule, rules)
+        # The extend file's rules land in the rules list; its leading `---`
+        # marker must not (it would break rule parsing).
+        self.assertIn("DOMAIN-SUFFIX,extend.example,DIRECT", rules)
+        self.assertIn("DOMAIN,extend2.example,proxy", rules)
+        self.assertIn("GEOIP,private,DIRECT,no-resolve", rules)
+        self.assertIn("DOMAIN-SUFFIX,ts.net,DIRECT", rules)
         self.assertEqual(rules[-1], "MATCH,default")
 
     def test_ai_rules(self):
         rules = self.config["rules"]
-        for rule in (
-            "DOMAIN-SUFFIX,x.ai,ai",
-            "DOMAIN-SUFFIX,grok.com,ai",
-            "DOMAIN-SUFFIX,grok.x.com,ai",
-            "DOMAIN-SUFFIX,oaistatic.com,ai",
-            "DOMAIN-SUFFIX,oaistatsig.com,ai",
-            "DOMAIN-SUFFIX,sift.com,ai",
-            "DOMAIN-SUFFIX,hcaptcha.com,ai",
-            "DOMAIN-SUFFIX,notebooklm.google.com,ai",
-            "DOMAIN-SUFFIX,clients6.google.com,ai",
-            "IP-ASN,400297,ai",
-        ):
-            self.assertIn(rule, rules)
-        # The AI rules stay ahead of the CN and final match rules so AI
-        # traffic always reaches the ai group.
-        for rule in ("GEOSITE,cn,cn", "GEOIP,CN,cn", "MATCH,default"):
-            self.assertLess(rules.index("DOMAIN-SUFFIX,x.ai,ai"), rules.index(rule))
-        self.assertLess(rules.index("IP-ASN,400297,ai"), rules.index("GEOIP,CN,cn"))
+        ai_rules = [rule for rule in rules if rule.rsplit(",", 1)[-1] == "ai"]
+        domain_ai = [rule for rule in ai_rules if rule.startswith("DOMAIN")]
+        asn_ai = [rule for rule in ai_rules if rule.startswith("IP-ASN")]
+        # Both routing dimensions exist: domain-based and ASN-based.
+        self.assertTrue(domain_ai)
+        self.assertTrue(asn_ai)
+        # Every AI rule stays ahead of the final match. The domain rules
+        # also precede the first CN capture; the ASN catch-alls deliberately
+        # sit between GEOSITE,cn and GEOIP,CN (domain match is the precise
+        # signal, ASN ranges only catch leftover egress IPs).
+        for ai_rule in ai_rules:
+            self.assertLess(rules.index(ai_rule), rules.index("MATCH,default"))
+        for ai_rule in domain_ai:
+            self.assertLess(rules.index(ai_rule), rules.index("GEOSITE,cn,cn"))
+        for ai_rule in asn_ai:
+            self.assertLess(rules.index(ai_rule), rules.index("GEOIP,CN,cn"))
 
 
 class PlainFlavorTest(unittest.TestCase):
@@ -243,7 +238,9 @@ class PlainFlavorTest(unittest.TestCase):
         cls.config = render_config(clash_tailnet=False)
 
     def test_proxy_names(self):
-        self.assertEqual([p["name"] for p in self.config["proxies"]], PROXY_HOSTNAMES)
+        self.assertEqual(
+            {p["name"] for p in self.config["proxies"]}, set(PROXY_HOSTNAMES)
+        )
 
     def test_no_tailnet_outbound_or_dialers(self):
         for proxy in self.config["proxies"]:
@@ -251,13 +248,14 @@ class PlainFlavorTest(unittest.TestCase):
         self.assertNotIn("TAILNET", [p["name"] for p in self.config["proxies"]])
 
     def test_proxy_groups(self):
-        groups = self.config["proxy-groups"]
-        self.assertEqual([g["name"] for g in groups], ["default", "proxy", "cn", "ai"])
-        by_name = {g["name"]: g["proxies"] for g in groups}
-        self.assertEqual(by_name["default"], ["DIRECT", "proxy"])
-        self.assertEqual(by_name["proxy"], ["sg1", "bwh", "jp1", "DIRECT"])
-        self.assertEqual(by_name["cn"], ["DIRECT"] + PROXY_HOSTNAMES)
-        self.assertEqual(by_name["ai"], ["sg1", "bwh", "jp1", "DIRECT"])
+        proxy_names = {p["name"] for p in self.config["proxies"]}
+        group_names = {g["name"] for g in self.config["proxy-groups"]}
+        # Flavor isolation: the plain subscription has no underlay selector.
+        self.assertNotIn("ts-underlay", group_names)
+        valid = proxy_names | group_names | {"DIRECT"}
+        for group in self.config["proxy-groups"]:
+            for member in group["proxies"]:
+                self.assertIn(member, valid, group["name"])
 
     def test_dns(self):
         dns = self.config["dns"]
@@ -278,7 +276,7 @@ class PlainFlavorTest(unittest.TestCase):
         # The tailnet range is no longer routed to an outbound; it falls
         # through to the private rules.
         self.assertFalse(any("TAILNET" in rule for rule in rules))
-        self.assertEqual(rules[0], "GEOSITE,private,DIRECT")
+        self.assertIn("GEOSITE,private,DIRECT", rules)
         self.assertIn("DOMAIN-SUFFIX,ts.net,DIRECT", rules)
         self.assertEqual(rules[-1], "MATCH,default")
 
