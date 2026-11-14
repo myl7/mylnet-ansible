@@ -4,6 +4,42 @@ uptime-kuma 部署在 sg1(`playbooks/uptime.yaml`)。监控项不是部署产物
 构建里没有管理 API,只有 socket.io + 管理员登录,所以监控项在 UI 手工维护,
 本文件是仓库侧清单,改动监控时两边同步。
 
+## 更新
+
+镜像保持 `louislam/uptime-kuma:2-slim`,跟随 2.x 稳定版,不固定补丁版本。
+执行 playbook 会拉取镜像并更新容器,不需要每次修改镜像标签。
+2026-11-14 核验的最新版本是 [2.5.11](https://github.com/louislam/uptime-kuma/releases/tag/2.5.11),
+修复了管理员权限下可触发的 RCE。playbook 会拒绝低于此版本的部署结果。
+
+```sh
+ansible-playbook playbooks/uptime.yaml --limit sg1
+```
+
+更新前先备份 `/srv/uptime/data`,备份 SQLite 数据时应暂停容器或使用 SQLite
+在线备份工具,不要直接复制正在写入的数据库。playbook 不自动备份或回滚数据库。
+它会给旧镜像加上 `mylnet/uptime-kuma:rollback-<image-sha256>` 标签,避免拉取
+新镜像后旧镜像变成无标签镜像,可用 `docker image ls mylnet/uptime-kuma` 查看。
+这不是离机备份,清理带标签镜像仍会删除它。
+
+部署会等待容器健康检查,再检查本机 HTTP 响应并输出容器中的实际版本。
+如果失败,检查容器日志,不要把 playbook 失败当成自动回滚。
+需要回滚时,先确认数据库兼容旧版本,必要时恢复更新前的数据备份;
+不要直接用旧版本打开迁移后的数据库。在 sg1 的 `/opt/stacks/uptime` 目录
+创建 `rollback.yaml`,把下面的 `<image-sha256>` 换成要恢复的旧镜像哈希。
+
+```yaml
+services:
+  uptime_kuma:
+    image: mylnet/uptime-kuma:rollback-<image-sha256>
+```
+
+然后在 sg1 的同一目录执行。
+
+```sh
+cd /opt/stacks/uptime
+docker compose -f compose.yaml -f rollback.yaml up -d --pull never
+```
+
 ## 监控清单
 
 | 名称 | 类型 | 目标 | 间隔 | 通知 |

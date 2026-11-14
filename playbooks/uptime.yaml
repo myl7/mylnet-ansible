@@ -34,6 +34,42 @@
         group: "{{ username }}"
         mode: "0755"
 
+    - name: Preserve previous Uptime Kuma image
+      when: not ansible_check_mode
+      block:
+        - name: Find existing Uptime Kuma container
+          ansible.builtin.command:
+            argv:
+              - docker
+              - ps
+              - --all
+              - --quiet
+              - --filter
+              - label=com.docker.compose.project=uptime
+              - --filter
+              - label=com.docker.compose.service=uptime_kuma
+          register: uptime_previous_container
+          changed_when: false
+
+        - name: Read previous Uptime Kuma image ID
+          ansible.builtin.command:
+            argv:
+              - docker
+              - inspect
+              - --format
+              - "{{ '{{.Image}}' }}"
+              - "{{ uptime_previous_container.stdout | trim }}"
+          register: uptime_previous_image
+          changed_when: false
+          when: uptime_previous_container.stdout | trim | length > 0
+
+        - name: Keep previous image tagged for rollback
+          community.docker.docker_image_tag:
+            name: "{{ uptime_previous_image.stdout | trim }}"
+            repository:
+              - "mylnet/uptime-kuma:rollback-{{ uptime_previous_image.stdout | trim | replace('sha256:', '') }}"
+          when: uptime_previous_container.stdout | trim | length > 0
+
     - name: Render compose file
       ansible.builtin.template:
         src: uptime/compose.yaml.j2
@@ -41,7 +77,6 @@
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
-      notify: Recreate containers
 
     - name: Start containers
       community.docker.docker_compose_v2:
@@ -49,6 +84,39 @@
         state: present
         remove_orphans: true
         pull: always
+        wait: true
+        wait_timeout: 300
+
+    - name: Verify running Uptime Kuma
+      when: not ansible_check_mode
+      block:
+        - name: Check Uptime Kuma HTTP endpoint
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ uptime_local_port }}/"
+            use_proxy: false
+          register: uptime_health
+          until: uptime_health.status == 200
+          retries: 12
+          delay: 5
+
+        - name: Read running Uptime Kuma version
+          community.docker.docker_compose_v2_exec:
+            project_src: "{{ stack_dir }}"
+            service: uptime_kuma
+            command: node -p "require('/app/package.json').version"
+          register: uptime_version
+          changed_when: false
+
+        - name: Check Uptime Kuma security fix is present
+          ansible.builtin.assert:
+            that:
+              - (uptime_version.stdout | trim) is version('2.5.11', '>=', version_type='semver')
+            fail_msg: "The pulled 2-slim image is older than the Uptime Kuma 2.5.11 security release"
+            quiet: true
+
+        - name: Record running Uptime Kuma version
+          ansible.builtin.debug:
+            msg: "Uptime Kuma {{ uptime_version.stdout | trim }} is healthy"
 
     - name: Render nginx site
       become: true
@@ -82,8 +150,5 @@
         state: absent
 
   handlers:
-    - name: Import docker handlers
-      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
-
     - name: Import nginx handlers
       ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
