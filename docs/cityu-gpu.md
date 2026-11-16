@@ -47,11 +47,12 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
 
 Agent 或任何脚本可以从公网直接查询空闲 GPU,复用面板的 Grafana 登录做
 basic auth,不新增接口与服务。dashboard 底部「Agent 查询」面板有一段面向
-Agent 的完整指令,点「复制」按钮整段发给你的 Agent,Agent 自己执行并回报
-空闲卡数。复制块里的命令不带任何凭证,凭证由 Agent 用 `curl -n` 从
-`~/.netrc` 读取;很多 Agent(实测 Claude Desktop)的凭证规则禁止把密码写进
-命令行,原版 `curl -u "USER:PASSWORD"` 会被直接拒绝执行。给 Agent 的机器
-一次性准备(chmod 600):
+Agent 的完整指令(凭证准备指引、跨平台 Python 轮询脚本、等待空闲卡与
+CUDA_VISIBLE_DEVICES 用法、出错条款;内容较长,面板内滚动),点「复制」
+按钮整段发给你的 Agent。复制块里的命令和脚本不带任何凭证,凭证由 Agent
+从 `~/.netrc` 读取;很多 Agent(实测 Claude Desktop)的凭证规则禁止把密码
+写进命令行,原版 `curl -u "USER:PASSWORD"` 会被直接拒绝执行。给 Agent 的
+机器一次性准备(chmod 600):
 
 ```sh
 echo 'machine cityu-gpu.myl.moe login cityu password <面板登录密码>' >> ~/.netrc

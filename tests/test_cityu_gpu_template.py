@@ -297,14 +297,27 @@ class DashboardTest(unittest.TestCase):
         # The real response paths: labels live under the metric object.
         self.assertIn("metric.hostname", copied_text)
         self.assertIn("metric.index", copied_text)
+        # The prompt ships a self-contained workflow: a cross-platform
+        # polling script, card-pinning guidance, and a stop-and-ask clause
+        # on auth failure.
+        self.assertIn("gpu_idle.py", copied_text)
+        self.assertIn("CUDA_VISIBLE_DEVICES", copied_text)
+        self.assertIn("401", copied_text)
+        # The prompt is long, so the panel must scroll it internally instead
+        # of sprawling down the dashboard.
+        pre_style = re.search(r'id="gpu-agent-cmd"[^>]*style="([^"]*)"', content)
+        self.assertIsNotNone(pre_style, "the copy target carries no style")
+        assert pre_style is not None
+        self.assertIn("max-height", pre_style.group(1))
+        self.assertIn("overflow-y:auto", pre_style.group(1))
         url = urlsplit(next(arg for arg in argv if arg.startswith("https://")))
         self.assertEqual(url.scheme, "https")
         self.assertEqual(url.hostname, DOMAIN)
         # The proxy route must address the provisioned datasource, and the
-        # query must be exactly what the idle stat shows.
+        # query must be the per-GPU idle rule the stat counts.
         uid = provisioned_datasource()["uid"]
         self.assertEqual(url.path, f"/api/datasources/proxy/uid/{uid}/api/v1/query")
-        self.assertEqual(parse_qs(url.query)["query"], self.idle_stat_exprs())
+        self.assertEqual(parse_qs(url.query)["query"], ["gpu_idle"])
 
     def test_table_value_columns_are_renamed(self) -> None:
         # Multi-target tables name their value fields "Value #<refId>"; a
