@@ -43,6 +43,21 @@
         group: "{{ username }}"
         mode: "0755"
 
+    - name: Preserve existing Gitea before updating
+      when: not ansible_check_mode
+      block:
+        - name: Inspect existing Gitea container
+          community.docker.docker_container_info:
+            name: gitea-gitea-1
+          register: gitea_previous
+
+        - name: Keep previous Gitea image tagged for rollback
+          community.docker.docker_image_tag:
+            name: "{{ gitea_previous.container.Image }}"
+            repository:
+              - "mylnet/gitea:rollback-{{ gitea_previous.container.Image | replace('sha256:', '') }}"
+          when: gitea_previous.exists
+
     - name: Render compose file
       ansible.builtin.template:
         src: gitea/compose.yaml.j2
@@ -50,7 +65,6 @@
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
-      notify: Recreate containers
 
     - name: Start containers
       community.docker.docker_compose_v2:
@@ -58,6 +72,39 @@
         state: present
         remove_orphans: true
         pull: always
+        wait: true
+        wait_timeout: 300
+
+    - name: Verify running Gitea
+      when: not ansible_check_mode
+      block:
+        - name: Check Gitea health endpoint
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ gitea_local_port }}/api/healthz"
+            use_proxy: false
+            return_content: true
+          register: gitea_health
+          until: gitea_health.status == 200 and (gitea_health.json.status | default('')) == 'pass'
+          retries: 12
+          delay: 5
+
+        - name: Read running Gitea version
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ gitea_local_port }}/api/v1/version"
+            use_proxy: false
+            return_content: true
+          register: gitea_version
+
+        - name: Check Gitea security fix is present
+          ansible.builtin.assert:
+            that:
+              - gitea_version.json.version is version('28.4.0', '>=', version_type='semver')
+            fail_msg: "The pulled Gitea image is older than the 28.4.0 security release"
+            quiet: true
+
+        - name: Record running Gitea version
+          ansible.builtin.debug:
+            msg: "Gitea {{ gitea_version.json.version }} is healthy"
 
     - name: Render nginx site
       become: true
@@ -78,8 +125,5 @@
       notify: Reload nginx
 
   handlers:
-    - name: Import docker handlers
-      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
-
     - name: Import nginx handlers
       ansible.builtin.import_tasks: tasks/nginx_handlers.yaml
