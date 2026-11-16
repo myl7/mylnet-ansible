@@ -159,3 +159,34 @@ FlClash and exclude it from battery optimization.
   challenge iframe rides H3, which without QUIC sniffing falls through every
   domain rule to MATCH). The subscription now routes the challenge domain to
   `ai` and sniffs QUIC on 443.
+
+## Updating the server core
+
+The server tracks stable `metacubex/mihomo`; rerun the existing
+`ansible-playbook playbooks/proxy.yaml` to pull updates. This does not update
+the phone's patched core. For an image-only update of existing deployments,
+use `ansible-playbook playbooks/proxy.yaml --tags mihomo-update`; this skips
+firewall, nginx, subscriptions and configuration rendering. It requires the
+existing Compose stack and uses its configuration unchanged.
+
+An unchanged image and configuration do not restart
+the service. Changed bind-mounted config forces one recreation; Compose detects
+image and Compose changes itself, without a second recreation handler.
+
+The playbook preserves the running image under `local/mihomo-rollback:<hash>`
+and prints this tag before pulling. Keep this output and do not prune rollback
+images before validation. It waits for the container and VLESS listener and
+prints the running version; verify an actual client connection as well.
+
+To roll back an image-only update, create `/opt/stacks/proxy/rollback.yaml` with
+`services: {mihomo: {image: local/mihomo-rollback:<hash>}}`, using the printed tag,
+then run from that directory:
+
+```sh
+docker compose -f compose.yaml -f rollback.yaml up -d --pull never --force-recreate mihomo
+docker compose exec -T mihomo /mihomo -v
+```
+
+Rollback is manual, not automatic. If configuration also changed, restore a
+known-good configuration separately; keeping an old image is not a config
+backup. The normal playbook run will resume tracking stable upstream.

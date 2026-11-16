@@ -117,7 +117,7 @@
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0600"
-      notify: Recreate containers
+      register: proxy_config
 
     - name: Copy compose file
       ansible.builtin.copy:
@@ -126,14 +126,80 @@
         owner: "{{ username }}"
         group: "{{ username }}"
         mode: "0644"
-      notify: Recreate containers
+
+    - name: Find existing mihomo container
+      tags: [mihomo-update]
+      ansible.builtin.command:
+        cmd: docker compose ps -q mihomo
+        chdir: "{{ stack_dir }}"
+      register: proxy_container
+      changed_when: false
+      check_mode: false
+      when: not ansible_check_mode
+
+    - name: Read previous mihomo image
+      tags: [mihomo-update]
+      community.docker.docker_container_info:
+        name: "{{ proxy_container.stdout | trim }}"
+      register: proxy_previous
+      when:
+        - not ansible_check_mode
+        - proxy_container.stdout | trim | length > 0
+
+    - name: Preserve previous mihomo image
+      tags: [mihomo-update]
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - tag
+          - "{{ proxy_previous.container.Image }}"
+          - "local/mihomo-rollback:{{ proxy_previous.container.Image.split(':')[1] }}"
+      changed_when: false
+      when:
+        - not ansible_check_mode
+        - proxy_container.stdout | trim | length > 0
+
+    - name: Report previous mihomo image
+      tags: [mihomo-update]
+      ansible.builtin.debug:
+        msg: "Rollback image: local/mihomo-rollback:{{ proxy_previous.container.Image.split(':')[1] }}"
+      when:
+        - not ansible_check_mode
+        - proxy_container.stdout | trim | length > 0
 
     - name: Start containers
+      tags: [mihomo-update]
       community.docker.docker_compose_v2:
         project_src: "{{ stack_dir }}"
         state: present
         remove_orphans: true
         pull: always
+        recreate: "{{ 'always' if proxy_config is defined and proxy_config is changed else 'auto' }}"
+        wait: true
+
+    - name: Check mihomo listener
+      tags: [mihomo-update]
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ proxy_port }}"
+        timeout: 30
+      when: not ansible_check_mode
+
+    - name: Read running mihomo version
+      tags: [mihomo-update]
+      ansible.builtin.command:
+        cmd: docker compose exec -T mihomo /mihomo -v
+        chdir: "{{ stack_dir }}"
+      register: proxy_version
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Report running mihomo version
+      tags: [mihomo-update]
+      ansible.builtin.debug:
+        msg: "{{ proxy_version.stdout }}"
+      when: not ansible_check_mode
 
   post_tasks:
     - name: Remove legacy Shadowsocks nftables rules
@@ -150,10 +216,6 @@
         executable: /bin/bash
       register: proxy_legacy_nft_remove
       changed_when: "'changed=true' in proxy_legacy_nft_remove.stdout_lines"
-
-  handlers:
-    - name: Import docker handlers
-      ansible.builtin.import_tasks: tasks/docker_handlers.yaml
 
 - name: Serve proxy subscription
   hosts: sg1
