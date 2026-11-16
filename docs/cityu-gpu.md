@@ -132,3 +132,24 @@ sudo rm -rf /opt/stacks/cityu-gpu /srv/cityu-gpu
 sudo rm -f /etc/nginx/sites-enabled/cityu-gpu /etc/nginx/sites-available/cityu-gpu
 sudo nginx -t && sudo nginx -s reload
 ```
+
+## Exporter network metric lifecycle
+
+Provisioning installs `nvitop-exporter` from the `myl7/nvitop` fork at
+commit `19281de69266eff3d612ff36882a6703942e2d7d`, using the
+`nvitop-exporter` subdirectory of the commit archive. No installed source
+files are patched by Ansible. The fork removes Gauge labels for network
+interfaces absent from the latest complete snapshot; failed collection
+preserves the previous series. Track upstream PR #239 before retiring the
+fork pin. To roll back, install the previously verified package or commit
+and restart only `nvitop-exporter`.
+
+Exporter output goes to `/var/log/nvitop-exporter/exporter.log`, independent
+of the host journal. The logrotate rule retains two compressed rotations
+and rotates when the file exceeds 1 MiB **when logrotate runs**; this is not
+a hard instantaneous size cap. Check that the host's logrotate timer is
+active. Do not leave temporary overrides that discard stdout/stderr in place.
+
+After changing exporter code, restart that service and verify its `/metrics`
+latency, current interface labels, GPU metrics, and Prometheus target health.
+This does not require restarting GPU jobs or changing Prometheus settings.

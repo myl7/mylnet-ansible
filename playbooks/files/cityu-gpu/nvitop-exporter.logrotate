@@ -1,0 +1,8 @@
+/var/log/nvitop-exporter/exporter.log {
+    size 1M
+    rotate 2
+    missingok
+    notifempty
+    compress
+    copytruncate
+}

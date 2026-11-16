@@ -8,6 +8,9 @@ StartLimitIntervalSec=0
 [Service]
 User=nvitop-exporter
 ExecStart=/opt/nvitop-exporter/bin/nvitop-exporter --bind-address {{ tailnet_ip }} --port {{ cityu_gpu_exporter_port }} --hostname {{ inventory_hostname }} --interval 1
+LogsDirectory=nvitop-exporter
+StandardOutput=append:/var/log/nvitop-exporter/exporter.log
+StandardError=append:/var/log/nvitop-exporter/exporter.log
 Restart=always
 RestartSec=5
 

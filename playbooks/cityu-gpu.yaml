@@ -56,9 +56,11 @@
   tasks:
     # Another session may hold the dpkg lock; python3-venv is already present
     # on both hosts, so this is usually a no-op that just needs to get through.
-    - name: Install python3-venv
+    - name: Install exporter prerequisites
       ansible.builtin.apt:
-        name: python3-venv
+        name:
+          - python3-venv
+          - logrotate
         state: present
       register: cityu_gpu_apt
       retries: 6
@@ -72,12 +74,30 @@
         groups: video
         append: true
 
-    - name: Install nvitop-exporter into a venv
+    - name: Install the nvitop-exporter fork into a venv
       ansible.builtin.pip:
-        name: nvitop-exporter
+        name: "nvitop-exporter @ https://github.com/myl7/nvitop/archive/19281de69266eff3d612ff36882a6703942e2d7d.tar.gz#subdirectory=nvitop-exporter"
         state: present
         virtualenv: /opt/nvitop-exporter
         virtualenv_command: /usr/bin/python3 -m venv
+
+      notify: Restart nvitop-exporter
+
+    - name: Create exporter log directory
+      ansible.builtin.file:
+        path: /var/log/nvitop-exporter
+        state: directory
+        owner: nvitop-exporter
+        group: nvitop-exporter
+        mode: "0755"
+
+    - name: Install exporter log rotation
+      ansible.builtin.copy:
+        src: cityu-gpu/nvitop-exporter.logrotate
+        dest: /etc/logrotate.d/nvitop-exporter
+        owner: root
+        group: root
+        mode: "0644"
 
     - name: Render the nvitop-exporter unit
       ansible.builtin.template:
@@ -111,6 +131,9 @@
         enabled: true
         state: started
         daemon_reload: true
+
+    - name: Apply exporter changes before verification
+      ansible.builtin.meta: flush_handlers
 
     - name: Verify the exporter
       when: not ansible_check_mode
