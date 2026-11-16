@@ -139,9 +139,15 @@
 
     - name: Read previous mihomo image
       tags: [mihomo-update]
-      community.docker.docker_container_info:
-        name: "{{ proxy_container.stdout | trim }}"
+      ansible.builtin.command:
+        argv:
+          - docker
+          - inspect
+          - --format
+          - "{{ '{{.Image}}' }}"
+          - "{{ proxy_container.stdout | trim }}"
       register: proxy_previous
+      changed_when: false
       when:
         - not ansible_check_mode
         - proxy_container.stdout | trim | length > 0
@@ -153,8 +159,8 @@
           - docker
           - image
           - tag
-          - "{{ proxy_previous.container.Image }}"
-          - "local/mihomo-rollback:{{ proxy_previous.container.Image.split(':')[1] }}"
+          - "{{ proxy_previous.stdout | trim }}"
+          - "local/mihomo-rollback:{{ (proxy_previous.stdout | trim).split(':')[1] }}"
       changed_when: false
       when:
         - not ansible_check_mode
@@ -163,7 +169,7 @@
     - name: Report previous mihomo image
       tags: [mihomo-update]
       ansible.builtin.debug:
-        msg: "Rollback image: local/mihomo-rollback:{{ proxy_previous.container.Image.split(':')[1] }}"
+        msg: "Rollback image: local/mihomo-rollback:{{ (proxy_previous.stdout | trim).split(':')[1] }}"
       when:
         - not ansible_check_mode
         - proxy_container.stdout | trim | length > 0
