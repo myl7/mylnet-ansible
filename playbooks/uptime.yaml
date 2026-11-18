@@ -110,8 +110,8 @@
         - name: Check Uptime Kuma security fix is present
           ansible.builtin.assert:
             that:
-              - (uptime_version.stdout | trim) is version('2.5.11', '>=', version_type='semver')
-            fail_msg: "The pulled 2-slim image is older than the Uptime Kuma 2.5.11 security release"
+              - (uptime_version.stdout | trim) is version('2.5.12', '>=', version_type='semver')
+            fail_msg: "The pulled 2-slim image is older than the Uptime Kuma 2.5.12 security release"
             quiet: true
 
         - name: Record running Uptime Kuma version

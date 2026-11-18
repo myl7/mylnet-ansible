@@ -8,8 +8,8 @@ uptime-kuma 部署在 sg1(`playbooks/uptime.yaml`)。监控项不是部署产物
 
 镜像保持 `louislam/uptime-kuma:2-slim`,跟随 2.x 稳定版,不固定补丁版本。
 执行 playbook 会拉取镜像并更新容器,不需要每次修改镜像标签。
-2026-11-14 核验的最新版本是 [2.5.11](https://github.com/louislam/uptime-kuma/releases/tag/2.5.11),
-修复了管理员权限下可触发的 RCE。playbook 会拒绝低于此版本的部署结果。
+2026-11-18 核验的最新版本是 [2.5.12](https://github.com/louislam/uptime-kuma/releases/tag/2.5.12),
+为 JSONata 查询添加沙箱并更新依赖。playbook 会拒绝低于此版本的部署结果。
 
 ```sh
 ansible-playbook playbooks/uptime.yaml --limit sg1
