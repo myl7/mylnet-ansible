@@ -32,8 +32,9 @@ DOMAIN = "cityu-gpu.myl.moe"
 CERT = "/etc/nginx/tls/cloudflare/myl.moe.pem"
 KEY = "/etc/nginx/tls/cloudflare/myl.moe.key"
 ADMIN_PASSWORD = "pa$$word"
-# Pinned like the playbook var: 13.3.0 cannot import datasource plugins.
-GRAFANA_IMAGE = "grafana/grafana:13.2.5"
+# The playbook follows the supported 13.2 patch branch because 13.3.0 cannot
+# import datasource plugins.
+GRAFANA_IMAGE = "grafana/grafana:13.2"
 
 # Metric names nvitop-exporter exports (units are part of the name). Any
 # other metric a query references must be a recording rule in

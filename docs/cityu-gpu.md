@@ -33,10 +33,7 @@ Blackwell)。回答两个问题:现在哪张卡空闲;不空闲的卡被谁占�
 
 ## Operations
 
-- 部署/升级:`ansible-playbook playbooks/cityu-gpu.yaml`。Grafana 因 13.3.0 的
-  插件加载缺陷暂时 pin 在 `grafana/grafana:13.2.5`(见 Quirks),上游修复后
-  改回 `latest`。升级前如需回滚凭据,先在 sg1
-  `docker image inspect --format '{{.Id}}' <image>` 记下当前 ID。
+- 部署/升级:`ansible-playbook playbooks/cityu-gpu.yaml`。Grafana 因 13.3.0 的插件加载缺陷固定在仍受支持的 `grafana/grafana:13.2` 分支(见 Quirks),跟随 13.2.x 补丁,上游修复后改回 `latest`。升级前如需回滚凭据,先在 sg1 `docker image inspect --format '{{.Id}}' <image>` 记下当前 ID。
 - exporter 升级:pip 固定 `state: present`,升级手动执行
   `sudo /opt/nvitop-exporter/bin/pip install -U nvitop-exporter && sudo systemctl restart nvitop-exporter`。
 - 改面板:改 dashboard JSON 后 Grafana 的 file provider 每 10s 热加载,通常
@@ -95,13 +92,7 @@ curl -s -n 'https://cityu-gpu.myl.moe/api/datasources/proxy/uid/prometheus/api/v
 - Grafana 开着 `GF_PANELS_DISABLE_SANITIZE_HTML=true`,否则「Agent 查询」面板
   复制按钮的内联 onclick 会被 sanitizer 剥掉。能编辑 dashboard 的只有 admin
   (共享账号是 Viewer),未净化 HTML 的注入面等同 admin 本身。
-- Grafana 13.3.0(2026-11-04 时的 latest)前端无法导入 datasource 插件:面板
-  报 "Could not load plugin" / "An unexpected error happened",全部数据面板空。
-  在干净实例上只用一个 prometheus datasource + 本 dashboard 即可复现,与本栈
-  配置无关;其后台插件安装器还会把 grafana.com 上的新版插件落进
-  `/var/lib/grafana/plugins` 加剧版本错配。因此 image pin 在 13.2.5;再升级时
-  先手动清掉 sg1 的 `/srv/cityu-gpu/grafana/data/plugins` 并在浏览器实测
-  面板有数后再收工。
+- Grafana 13.3.0(2026-11-04 时的 latest)前端无法导入 datasource 插件:面板报 "Could not load plugin" / "An unexpected error happened",全部数据面板空。在干净实例上只用一个 prometheus datasource + 本 dashboard 即可复现,与本栈配置无关;其后台插件安装器还会把 grafana.com 上的新版插件落进 `/var/lib/grafana/plugins` 加剧版本错配。因此 image 固定在 `grafana/grafana:13.2`,跟随 13.2.x 补丁:13.2.6 于 2026-11-10 发布,含与 13.3.1 相同的六个 CVE 修复,Grafana 对 13.2 的补丁支持到 2027-05-18。再升级到 13.3 时,先手动清掉 sg1 的 `/srv/cityu-gpu/grafana/data/plugins` 并在浏览器实测面板有数后再收工。
 - 表格面板多查询合并后,值列的原始字段名是 `Value #A` 形态,organize
   transform 必须按这个键名改名,否则列头不可读(测试有回归断言)。
 
