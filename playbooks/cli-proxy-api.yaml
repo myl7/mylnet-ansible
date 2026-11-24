@@ -172,7 +172,7 @@
           {{ playbook_dir }}/../scripts/ensure_cliproxy.py
           --config {{ stack_dir }}/config.yaml
           --url http://127.0.0.1:{{ cliproxy_local_port }}
-          --compatible-model deepseek-v4-flash
+          --compatible-model deepseek-v4.1-flash
         executable: /usr/bin/python3
       environment:
         CLIPROXY_MANAGEMENT_KEY: "{{ cliproxy_management_key }}"
